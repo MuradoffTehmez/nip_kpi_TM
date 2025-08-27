@@ -154,3 +154,25 @@ def to_excel_formatted_report(df: pd.DataFrame, employee_name: str, evaluation_p
     writer.close()
     processed_data = output.getvalue()
     return processed_data
+
+def get_styled_table_html(df: pd.DataFrame, formatters: dict = None, alignments: dict = None):
+    header_properties = {
+        'background-color': '#DDEBF7', 'color': 'black', 'font-weight': 'bold',
+        'text-align': 'center', 'border': '1px solid #B0B0B0'
+    }
+    cell_properties = {'border': '1px solid #B0B0B0'}
+    
+    styler = df.style.set_table_styles([
+        {'selector': 'th', 'props': header_properties},
+        {'selector': 'td', 'props': cell_properties}
+    ])
+    
+    if formatters:
+        styler.format(formatters, na_rep="")
+    
+    if alignments:
+        for align, columns in alignments.items():
+            styler.set_properties(subset=columns, **{'text-align': align})
+
+    styler.hide(axis="index")
+    return styler.to_html()

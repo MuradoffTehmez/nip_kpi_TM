@@ -8,7 +8,7 @@ st.set_page_config(layout="wide")
 
 from sqlalchemy import select, update, delete
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report
+from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html
 
 from models.user import User
 from models.indicator import Indicator
@@ -99,7 +99,15 @@ with get_db() as session:
                 st.markdown("---")
                 st.markdown(f"**Əməkdaş:** {st.session_state.report_employee}")
                 st.markdown(f"**Qiymətləndirmə dövrü:** {st.session_state.report_month} {st.session_state.report_year}")
-                st.dataframe(report_df.style.format({"Yekun nəticə faizlə": "{:.2f}"}, na_rep=""), hide_index=True)
+                
+                report_formatters = {"Yekun nəticə faizlə": "{:.2f}"}
+                report_alignments = {
+                    'center': ['S/N', 'Ümumi qiymət', 'Yekun qiymətin faiz bölgüsü'],
+                    'left': ['Fəaliyyət üzrə']
+                }
+                
+                html_table = get_styled_table_html(report_df, formatters=report_formatters, alignments=report_alignments)
+                st.markdown(html_table, unsafe_allow_html=True)
                 
                 evaluation_period_str = f"{st.session_state.report_month} {st.session_state.report_year}"
                 excel_report = to_excel_formatted_report(
@@ -118,6 +126,7 @@ with get_db() as session:
     st.divider()
 
     st.subheader("Bütün Qiymətləndirmələr (Toplu Baxış)")
+    st.info("Bu cədvəl məlumatları redaktə etmək üçündür və xüsusi dizayna malik deyil.")
     performance_data = session.execute(select(Performance.id, Performance.user_id, Performance.indicator_id, Performance.evaluation_month, Performance.evaluation_year, Performance.points, Performance.weighted_points)).fetchall()
     if len(performance_data) > 0:
         cols = st.columns(5)
@@ -149,7 +158,7 @@ with get_db() as session:
         if not df_to_export.empty:
             excel_data = to_excel(df_to_export)
             st.download_button(label="📥 Bütün siyahını Excel-ə yüklə", data=excel_data, file_name='performance_hesabat_toplu.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        st.divider()
+        
         edited_df = st.data_editor(data=df, hide_index=True, column_config={"check_mark": st.column_config.CheckboxColumn(label="", width=1), "id": st.column_config.NumberColumn(label="#id", width=1, disabled=True), "user_id": st.column_config.TextColumn(label="Əməkdaş", width=200, disabled=True), "indicator_id": st.column_config.TextColumn(label="Göstərici", width="large", disabled=True), "evaluation_month": st.column_config.TextColumn(label="Qiymətləndirmə növü", width=80, disabled=True), "evaluation_year": st.column_config.NumberColumn(label="İl", width=30, disabled=True), "points": st.column_config.NumberColumn(label="Bal", min_value=2, max_value=5, width=30), "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30, disabled=True),})
         checked_ids = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
         edited_data = {}

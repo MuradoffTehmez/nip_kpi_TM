@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 
 from sqlalchemy import select
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report
+from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html
 from data.months_in_azeri import evaluation_types
 
 from models.user import User
@@ -57,17 +57,28 @@ if len(user_performance_data) > 0:
     df = df[(df["evaluation_year"].isin(years_chosen)) & (df["evaluation_month"].isin(months_chosen))]
 
     grouped_df = df.groupby(by=["user_id", "evaluation_month", "evaluation_year"], as_index=False).agg({"weighted_points": "sum"})
-    st.dataframe(data=grouped_df, hide_index=True, column_config={"user_id": st.column_config.TextColumn(label="Əməkdaş", width=200), "evaluation_month": st.column_config.TextColumn(label="Qiymətləndirmə növü", width=80), "evaluation_year": st.column_config.NumberColumn(label="İl", width=30), "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30)})
+    
+    grouped_df = grouped_df.rename(columns={
+        "user_id": "Əməkdaş", 
+        "evaluation_month": "Qiymətləndirmə növü", 
+        "evaluation_year": "İl",
+        "weighted_points": "Yekun Bal"
+    })
+    
+    grouped_formatters = {"Yekun Bal": "{:.2f}"}
+    grouped_alignments = {'left': ['Əməkdaş', 'Qiymətləndirmə növü'], 'center': ['İl', 'Yekun Bal']}
+    grouped_html = get_styled_table_html(grouped_df, formatters=grouped_formatters, alignments=grouped_alignments)
+    st.markdown(grouped_html, unsafe_allow_html=True)
 
     st.divider()
     st.subheader("Performansın Zamanla Dəyişimi")
     if not grouped_df.empty and len(grouped_df) > 1:
         df_for_chart = grouped_df.copy()
-        df_for_chart['evaluation_month'] = pd.Categorical(df_for_chart['evaluation_month'], categories=evaluation_types, ordered=True)
-        df_for_chart = df_for_chart.sort_values(by=['evaluation_year', 'evaluation_month'])
-        df_for_chart['Dövr'] = df_for_chart['evaluation_year'].astype(str) + ' - ' + df_for_chart['evaluation_month'].astype(str)
+        df_for_chart['Qiymətləndirmə növü'] = pd.Categorical(df_for_chart['Qiymətləndirmə növü'], categories=evaluation_types, ordered=True)
+        df_for_chart = df_for_chart.sort_values(by=['İl', 'Qiymətləndirmə növü'])
+        df_for_chart['Dövr'] = df_for_chart['İl'].astype(str) + ' - ' + df_for_chart['Qiymətləndirmə növü'].astype(str)
         df_for_chart = df_for_chart.set_index('Dövr')
-        chart_data = df_for_chart[['weighted_points']].rename(columns={'weighted_points': 'Yekun Bal'})
+        chart_data = df_for_chart[['Yekun Bal']]
         st.line_chart(chart_data)
     else:
         st.info("Performans qrafikini göstərmək üçün ən azı iki fərqli dövr üzrə məlumat olmalıdır.")
@@ -128,7 +139,20 @@ if len(user_performance_data) > 0:
 
     st.divider()
     if st.toggle("Bütün nəticələrimə detallı bax"):
-        st.dataframe(data=df, hide_index=True, column_config={"user_id": st.column_config.TextColumn(label="Əməkdaş", width=200), "indicator_id": st.column_config.TextColumn(label="Göstərici", width="large"), "evaluation_month": st.column_config.TextColumn(label="Qiymətləndirmə növü", width=80), "evaluation_year": st.column_config.NumberColumn(label="İl", width=30), "points": st.column_config.NumberColumn(label="Bal", width=30), "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30)})
+        detailed_df = df.rename(columns={
+            "user_id": "Əməkdaş", "indicator_id": "Göstərici",
+            "evaluation_month": "Qiymətləndirmə növü", "evaluation_year": "İl",
+            "points": "Bal", "weighted_points": "Yekun Bal"
+        })
+        
+        detail_formatters = {"Yekun Bal": "{:.2f}"}
+        detail_alignments = {
+            'left': ['Əməkdaş', 'Göstərici', 'Qiymətləndirmə növü'],
+            'center': ['İl', 'Bal', 'Yekun Bal']
+        }
+        detail_html = get_styled_table_html(detailed_df, formatters=detail_formatters, alignments=detail_alignments)
+        st.markdown(detail_html, unsafe_allow_html=True)
+        
         if not df.empty:
             excel_data_user_raw = to_excel(df)
             st.download_button(label="📥 Detallı siyahını yüklə", data=excel_data_user_raw, file_name=f'neticelerim_detalli_{user_id}.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
