@@ -10,6 +10,8 @@ from sqlalchemy import select
 from database import get_db
 from utils.utils import download_guide_doc_file, logout, to_excel
 
+from data.months_in_azeri import evaluation_types
+
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
@@ -71,6 +73,26 @@ if len(user_performance_data) > 0:
                     "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30),
                 }
             )
+
+    st.divider()
+    st.subheader("Performansın Zamanla Dəyişimi")
+
+    if not grouped_df.empty and len(grouped_df) > 1:
+        df_for_chart = grouped_df.copy()
+        df_for_chart['evaluation_month'] = pd.Categorical(
+            df_for_chart['evaluation_month'],
+            categories=evaluation_types,
+            ordered=True
+        )
+        df_for_chart = df_for_chart.sort_values(by=['evaluation_year', 'evaluation_month'])
+        df_for_chart['Dövr'] = df_for_chart['evaluation_year'].astype(str) + ' - ' + df_for_chart['evaluation_month'].astype(str)
+        df_for_chart = df_for_chart.set_index('Dövr')
+        chart_data = df_for_chart[['weighted_points']].rename(columns={'weighted_points': 'Yekun Bal'})
+        st.line_chart(chart_data)
+    else:
+        st.info("Performans qrafikini göstərmək üçün ən azı iki fərqli dövr üzrə məlumat olmalıdır.")
+
+    st.divider()
              
     if not df.empty:
         excel_data_user = to_excel(df)
@@ -81,7 +103,6 @@ if len(user_performance_data) > 0:
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     
-
     if st.toggle("detallı bax"):
         st.divider()
         st.dataframe(data=df, hide_index=True, 
@@ -96,6 +117,5 @@ if len(user_performance_data) > 0:
                 )
 else:
     st.markdown("***:red[Sizin üçün heç bir qiymətləndirmə məlumatı tapılmadı!]***")
-
 
 logout()

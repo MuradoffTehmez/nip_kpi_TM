@@ -22,9 +22,103 @@ download_guide_doc_file()
 
 with get_db() as session:
     fullnames = list(set(session.scalars(select(UserProfile.full_name).join(User, UserProfile.user_id==User.id).where(User.role!="admin", User.is_active==True)).all()))
-    indicator_descriptions = session.scalars(select(Indicator.description)).all()
+    
+    indicators_from_db = session.query(Indicator.id, Indicator.description, Indicator.weight).all()
+    indicator_descriptions = [desc for id, desc, w in indicators_from_db]
+    indicator_id_map = {id: (desc, w) for id, desc, w in indicators_from_db}
 
 
+    
+
+    st.subheader("Fərdi Fəaliyyət Hesabatı Yarat")
+    with st.expander("Hesabat üçün işçi və dövr seçin"):
+        report_cols = st.columns(3)
+        with report_cols[0]:
+            report_fullname = st.selectbox("İşçi seçin:", options=fullnames, index=None, key="report_employee")
+        
+        
+        if report_fullname:
+            report_user_id_tuple = session.query(UserProfile.user_id).where(UserProfile.full_name == report_fullname).first()
+            if report_user_id_tuple:
+                report_user_id = report_user_id_tuple[0]
+                
+                available_years = list(set(session.scalars(
+                    select(Performance.evaluation_year).where(Performance.user_id == report_user_id)
+                ).all()))
+                
+                with report_cols[1]:
+                    report_year = st.selectbox("İl seçin:", options=available_years, index=None, key="report_year")
+
+                if report_year:
+                    available_months = list(set(session.scalars(
+                        select(Performance.evaluation_month).where(Performance.user_id == report_user_id, Performance.evaluation_year == report_year)
+                    ).all()))
+                    with report_cols[2]:
+                        report_month = st.selectbox("Qiymətləndirmə növü seçin:", options=available_months, index=None, key="report_month")
+
+                    if report_month and st.button("Hesabatı Göstər", key="show_report"):
+                        # Məlumatları bazadan çəkirik
+                        performance_records = session.query(
+                            Performance.indicator_id,
+                            Performance.points,
+                            Performance.weighted_points
+                        ).where(
+                            Performance.user_id == report_user_id,
+                            Performance.evaluation_year == report_year,
+                            Performance.evaluation_month == report_month
+                        ).all()
+
+                        if performance_records:
+                            report_data = []
+                            total_weighted_score = 0
+
+                            
+                            for i, record in enumerate(performance_records):
+                                indicator_id, points, weighted_points = record
+                                indicator_desc, indicator_weight = indicator_id_map.get(indicator_id, ("Naməlum", 0))
+                                
+                                report_data.append({
+                                    "S/N": i + 1,
+                                    "Fəaliyyət üzrə": indicator_desc,
+                                    "Ümumi qiymət": points,
+                                    "Yekun qiymətin faiz bölgüsü": int(indicator_weight * 100),
+                                    "Yekun nəticə faizlə": weighted_points,
+                                })
+                                total_weighted_score += weighted_points
+                            
+                            
+                            report_data.append({
+                                "S/N": len(performance_records) + 1,
+                                "Fəaliyyət üzrə": "Qiymətləndirilmə üzrə yekun nəticə",
+                                "Ümumi qiymət": "",
+                                "Yekun qiymətin faiz bölgüsü": "",
+                                "Yekun nəticə faizlə": round(total_weighted_score, 2),
+                            })
+                            
+                            report_df = pd.DataFrame(report_data)
+
+                            st.markdown("---")
+                            st.markdown(f"**Əməkdaş:** {report_fullname}")
+                            st.markdown(f"**Qiymətləndirmə dövrü:** {report_month} {report_year}")
+                            
+                            
+                            st.dataframe(report_df.style.format({
+                                "Yekun nəticə faizlə": "{:.2f}"
+                            }), hide_index=True)
+                            
+                            
+                            excel_report = to_excel(report_df)
+                            st.download_button(
+                                label="📥 Hesabatı Excel-ə yüklə",
+                                data=excel_report,
+                                file_name=f"hesabat_{report_fullname}_{report_year}_{report_month}.xlsx",
+                                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                            )
+                        else:
+                            st.warning("Seçilmiş dövr üçün məlumat tapılmadı.")
+    st.divider()
+
+    st.subheader("Bütün Qiymətləndirmələr (Toplu Baxış)")
     performance_data = session.execute(select(Performance.id,
                                               Performance.user_id, Performance.indicator_id, 
                                               Performance.evaluation_month, Performance.evaluation_year, 
@@ -55,7 +149,7 @@ with get_db() as session:
 
 
         user_id_name_map = dict(session.execute(select(UserProfile.user_id, UserProfile.full_name)).fetchall())
-        indicator_id_description_map = dict(session.execute(select(Indicator.id, Indicator.description)).fetchall())     
+        indicator_id_description_map = {id: desc for id, desc, w in indicators_from_db}     
 
         df = pd.DataFrame(data=performance_data)
         df["user_id"] = df["user_id"].map(user_id_name_map)
@@ -72,17 +166,14 @@ with get_db() as session:
                     "points", "weighted_points"
                 ]]
 
-        
-        # Yükləmə üçün UI-a xas sütunları cədvəldən çıxaraq
         df_to_export = df.drop(columns=['check_mark', 'id'])
 
-        # Cədvəl boş deyilsə, yükləmə düyməsini göstər
         if not df_to_export.empty:
             excel_data = to_excel(df_to_export)
             st.download_button(
-                label="📥 Excel-ə yüklə",
+                label="📥 Bütün siyahını Excel-ə yüklə",
                 data=excel_data,
-                file_name='performance_hesabat.xlsx',
+                file_name='performance_hesabat_toplu.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
         
@@ -113,12 +204,12 @@ with get_db() as session:
                 edited_data[performance_id]["points"] = int(current_value)
 
                 indicator_desc = edited_df.loc[edited_df["id"]==performance_id, "indicator_id"].iloc[0]
-                if indicator_desc == indicator_descriptions[0]:
-                    edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.5)
-                elif indicator_desc == indicator_descriptions[1]:
-                    edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.4)
-                elif indicator_desc == indicator_descriptions[2]:
-                    edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.1)   
+                weight_to_apply = 0.1 # default
+                for id, desc, w in indicators_from_db:
+                    if desc == indicator_desc:
+                        weight_to_apply = w
+                        break
+                edited_data[performance_id]["weighted_points"] = (float(current_value) * weight_to_apply)
         
         data_edited = len(edited_data) > 0
         data_to_delete = len(edited_df.loc[edited_df["check_mark"]==True]) > 0
@@ -154,7 +245,7 @@ with get_db() as session:
                 popup_delete()
 
         st.divider()
-        if st.toggle(label="qiymətləndir"):
+        if st.toggle(label="Yeni Qiymətləndirmə Daxil Et"):
             st.divider()
             add_data()
     else:
