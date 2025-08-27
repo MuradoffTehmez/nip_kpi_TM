@@ -1,3 +1,5 @@
+# muradofftehmez/nip_kpi_tm/pages/2_user.py
+
 import streamlit as st, pandas as pd
 from streamlit_cookies_controller import CookieController
 controller = CookieController()
@@ -6,7 +8,7 @@ st.set_page_config(layout="wide")
 
 from sqlalchemy import select
 from database import get_db
-from utils.utils import download_guide_doc_file, logout
+from utils.utils import download_guide_doc_file, logout, to_excel
 
 from models.user import User
 from models.indicator import Indicator
@@ -19,9 +21,20 @@ download_guide_doc_file()
 
 user_id = controller.get("user_id")
 
+if not user_id:
+    st.markdown("Zəhmət olmasa, nəticələrə baxmaq üçün giriş edin.")
+    st.stop()
+
 with get_db() as session:
     years = list(set(session.scalars(select(Performance.evaluation_year).where(Performance.user_id==user_id)).all()))
-    user_performance_data = session.execute(select(Performance.user_id, Performance.indicator_id, Performance.evaluation_month, Performance.evaluation_year, Performance.points, Performance.weighted_points).where(Performance.user_id==user_id)).fetchall()
+    user_performance_data = session.execute(select(
+        Performance.user_id, 
+        Performance.indicator_id, 
+        Performance.evaluation_month, 
+        Performance.evaluation_year, 
+        Performance.points, 
+        Performance.weighted_points
+    ).where(Performance.user_id==user_id)).fetchall()
     
 
 if len(user_performance_data) > 0:
@@ -58,7 +71,16 @@ if len(user_performance_data) > 0:
                     "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30),
                 }
             )
-
+             
+    if not df.empty:
+        excel_data_user = to_excel(df)
+        st.download_button(
+            label="📥 Nəticələri Excel-ə yüklə",
+            data=excel_data_user,
+            file_name=f'neticelerim_{user_id}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    
 
     if st.toggle("detallı bax"):
         st.divider()
@@ -73,7 +95,7 @@ if len(user_performance_data) > 0:
                     }
                 )
 else:
-    st.markdown("***:red[Məlumat tapılmadı!]***")
+    st.markdown("***:red[Sizin üçün heç bir qiymətləndirmə məlumatı tapılmadı!]***")
 
 
 logout()

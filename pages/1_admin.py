@@ -1,3 +1,5 @@
+# muradofftehmez/nip_kpi_tm/pages/1_admin.py
+
 import streamlit as st, pandas as pd, numpy as np
 from streamlit_cookies_controller import CookieController
 controller = CookieController()
@@ -6,7 +8,7 @@ st.set_page_config(layout="wide")
 
 from sqlalchemy import select, update, delete
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation
+from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel
 
 from models.user import User
 from models.indicator import Indicator
@@ -70,6 +72,20 @@ with get_db() as session:
                     "points", "weighted_points"
                 ]]
 
+        
+        # Yükləmə üçün UI-a xas sütunları cədvəldən çıxaraq
+        df_to_export = df.drop(columns=['check_mark', 'id'])
+
+        # Cədvəl boş deyilsə, yükləmə düyməsini göstər
+        if not df_to_export.empty:
+            excel_data = to_excel(df_to_export)
+            st.download_button(
+                label="📥 Excel-ə yüklə",
+                data=excel_data,
+                file_name='performance_hesabat.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+        
 
         st.divider()
         edited_df = st.data_editor(data=df, hide_index=True, 
@@ -85,7 +101,6 @@ with get_db() as session:
                     }
                 )
                 
-
         checked_ids = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
         edited_data = {}
         for performance_id in checked_ids:
@@ -97,41 +112,34 @@ with get_db() as session:
                     edited_data[performance_id] = {}
                 edited_data[performance_id]["points"] = int(current_value)
 
-                if edited_df.loc[edited_df["id"]==performance_id, "indicator_id"].iloc[0] == indicator_descriptions[0]:
+                indicator_desc = edited_df.loc[edited_df["id"]==performance_id, "indicator_id"].iloc[0]
+                if indicator_desc == indicator_descriptions[0]:
                     edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.5)
-                elif edited_df.loc[edited_df["id"]==performance_id, "indicator_id"].iloc[0] == indicator_descriptions[1]:
+                elif indicator_desc == indicator_descriptions[1]:
                     edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.4)
-                elif edited_df.loc[edited_df["id"]==performance_id, "indicator_id"].iloc[0] == indicator_descriptions[2]:
+                elif indicator_desc == indicator_descriptions[2]:
                     edited_data[performance_id]["weighted_points"] = (float(current_value) * 0.1)   
         
-        
         data_edited = len(edited_data) > 0
-        data_to_delete = len(indicators_chosen) == 3
-
+        data_to_delete = len(edited_df.loc[edited_df["check_mark"]==True]) > 0
         
-    
-
-
         cols = st.columns(8)
         with cols[0]:
             if st.button(label="Dəyişdir", icon=":material/edit_note:", disabled=not data_edited):
-                for performance_id in edited_data:
+                for performance_id, values in edited_data.items():
                     with get_db() as conn:
                         conn.execute(
-                            update(Performance).where(Performance.id==performance_id).values(
-                                edited_data[performance_id]
-                            )
+                            update(Performance).where(Performance.id==performance_id).values(values)
                         )
                         conn.commit()
                 popup_successful_operation()
-
 
         @st.dialog("Silmək istədiyinizə əminsinizmi?")
         def popup_delete():
             button_cols = st.columns(6)
             with button_cols[0]:
                 if st.button(label="Bəli"):
-                    ids_to_delete = list(set(edited_df["id"]))
+                    ids_to_delete = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
                     with get_db() as conn:
                         conn.execute(
                             delete(Performance).where(Performance.id.in_(ids_to_delete))
@@ -145,13 +153,11 @@ with get_db() as session:
             if st.button(label="Sil", icon=":material/delete:", disabled=not data_to_delete):
                 popup_delete()
 
-
         st.divider()
         if st.toggle(label="qiymətləndir"):
             st.divider()
             add_data()
     else:
         add_data()
-
 
 logout()

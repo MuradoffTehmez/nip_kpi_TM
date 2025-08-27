@@ -1,3 +1,5 @@
+# muradofftehmez/nip_kpi_tm/utils/utils.py
+
 import streamlit as st
 from streamlit_cookies_controller import CookieController
 controller = CookieController()
@@ -11,6 +13,11 @@ from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
+
+
+import io
+import pandas as pd
+
 
 
 def download_guide_doc_file():
@@ -63,10 +70,6 @@ def add_data():
                 performance_data = []
                 with st.container(border=True):
                     data = {}
-
-                    # f"""
-                    # ###### {indicator_descriptions[0]}:
-                    # """
                     st.subheader(f"{indicator_descriptions[0]}:")
 
                     cols = st.columns(4)
@@ -81,16 +84,11 @@ def add_data():
                             data["weighted_points"] = task_accomplishment_point * 0.5
                             data["evaluation_year"] = year_to_evaluate
                             data["evaluation_month"] = month_to_evaluate
-
                             performance_data.append(data)
 
 
                 with st.container(border=True):
                     data = {}
-
-                    # f"""
-                    # ###### {indicator_descriptions[1]}:
-                    # """
                     st.subheader(f"{indicator_descriptions[1]}:")
 
                     cols = st.columns(4)
@@ -105,16 +103,11 @@ def add_data():
                             data["weighted_points"] = criterion_point * 0.4
                             data["evaluation_year"] = year_to_evaluate
                             data["evaluation_month"] = month_to_evaluate
-
                             performance_data.append(data)
 
 
                 with st.container(border=True):
                     data = {}
-
-                    # f"""
-                    # ###### {indicator_descriptions[2]}:
-                    # """
                     st.subheader(f"{indicator_descriptions[2]}:")
 
                     cols = st.columns(4)
@@ -129,19 +122,28 @@ def add_data():
                             data["weighted_points"] = working_discipline_point * 0.1
                             data["evaluation_year"] = year_to_evaluate
                             data["evaluation_month"] = month_to_evaluate
-
                             performance_data.append(data)
                 
+                add_data_enabled = task_accomplishment_point and criterion_point and working_discipline_point
 
-                add_data = task_accomplishment_point and criterion_point and working_discipline_point
-
-
-                if st.button(label="Əlavə et", icon=":material/add_circle:", disabled=not add_data):
+                if st.button(label="Əlavə et", icon=":material/add_circle:", disabled=not add_data_enabled):
                     with get_db() as conn:
-                        result = conn.execute(
+                        conn.execute(
                             insert(Performance),
                                 performance_data,
                         )
                         conn.commit()
                 
                     popup_successful_operation()
+
+def to_excel(df: pd.DataFrame):
+    """
+    Pandas DataFrame-i qəbul edir və onu Excel faylı kimi
+    yaddaşda (in-memory) bayt formatına çevirir.
+    """
+    output = io.BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    df.to_excel(writer, index=False, sheet_name='Performance_Hesabat')
+    writer.close()
+    processed_data = output.getvalue()
+    return processed_data
