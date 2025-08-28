@@ -28,7 +28,7 @@ def logout():
     with st.sidebar:
         st.divider()
         if st.button(label="Çıxış", icon=":material/logout:"):
-            controller.set("user_id", None)
+            controller.delete("user_id")
             st.switch_page(page="main.py")
 
 @st.dialog("Uğurlu əməliyyat!")
