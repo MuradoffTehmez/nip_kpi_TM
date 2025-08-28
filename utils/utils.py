@@ -156,11 +156,15 @@ def to_excel_formatted_report(df: pd.DataFrame, employee_name: str, evaluation_p
     return processed_data
 
 def get_styled_table_html(df: pd.DataFrame, formatters: dict = None, alignments: dict = None):
-    header_properties = {
+    
+    header_properties = list({
         'background-color': '#DDEBF7', 'color': 'black', 'font-weight': 'bold',
         'text-align': 'center', 'border': '1px solid #B0B0B0'
-    }
-    cell_properties = {'border': '1px solid #B0B0B0'}
+    }.items())
+    
+    cell_properties = list({
+        'border': '1px solid #B0B0B0'
+    }.items())
     
     styler = df.style.set_table_styles([
         {'selector': 'th', 'props': header_properties},
