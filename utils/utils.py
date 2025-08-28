@@ -38,78 +38,71 @@ def popup_successful_operation():
 
 def add_data():
     with get_db() as session:
-        fullnames = list(set(session.scalars(select(UserProfile.full_name).join(User, UserProfile.user_id==User.id).where(User.role!="admin", User.is_active==True)).all()))
-        indicator_descriptions = session.scalars(select(Indicator.description)).all()
-        cols = st.columns(5)
+        fullnames = sorted(list(set(session.scalars(
+            select(UserProfile.full_name)
+            .join(User, UserProfile.user_id == User.id)
+            .where(User.role != "admin", User.is_active == True)
+        ).all())))
+        
+        active_indicators = session.query(Indicator).filter(Indicator.is_active == True).all()
+
+        cols = st.columns(3)
         with cols[0]:
             fullname_to_evaluate = st.selectbox(label="Əməkdaş:", options=fullnames, index=None)
         with cols[1]:
-            year_to_evaluate = st.selectbox(label="İl:", options=[2024, 2025], index=None)
+            year_to_evaluate = st.selectbox(label="İl:", options=[2024, 2025, 2026], index=None)
         with cols[2]:
             month_to_evaluate = st.selectbox(label="Qiymətləndirmə növü:", options=evaluation_types, index=None)
+        
         if fullname_to_evaluate and year_to_evaluate and month_to_evaluate:
-            user_id_to_evaluate = session.query(UserProfile.user_id).where(UserProfile.full_name==fullname_to_evaluate).scalar()
-            performance_data_by_user = session.execute(select(Performance.user_id, Performance.evaluation_year, Performance.evaluation_month)).fetchall()
-            performance_data_exists = (user_id_to_evaluate, year_to_evaluate, month_to_evaluate) in performance_data_by_user
-            if performance_data_exists:
+            user_id_to_evaluate = session.query(UserProfile.user_id).where(UserProfile.full_name == fullname_to_evaluate).scalar()
+            
+            existing_performance = session.query(Performance).filter(
+                Performance.user_id == user_id_to_evaluate,
+                Performance.evaluation_year == year_to_evaluate,
+                Performance.evaluation_month == month_to_evaluate
+            ).first()
+
+            if existing_performance:
                 st.divider()
-                st.markdown("***:red[Seçdiyiniz əməkdaşın qeyd etdiyiniz tarix üzrə qiymətləndirməsi artıq mövcuddur!]***")
+                st.error("***Seçdiyiniz əməkdaşın qeyd etdiyiniz dövr üzrə qiymətləndirməsi artıq mövcuddur!***")
             else:
-                performance_data = []
-                with st.container(border=True):
-                    data = {}
-                    st.subheader(f"{indicator_descriptions[0]}:")
-                    cols = st.columns(4)
-                    with cols[3]:
-                        indicator_id = session.execute(select(Indicator.id).where(Indicator.description==indicator_descriptions[0])).scalar()
-                        task_accomplishment_point = st.number_input(label="", min_value=2, max_value=5, value=None)
-                        if task_accomplishment_point:
-                            data["user_id"] = user_id_to_evaluate
-                            data["indicator_id"] = indicator_id
-                            data["points"] = task_accomplishment_point
-                            data["weighted_points"] = task_accomplishment_point * 0.5
-                            data["evaluation_year"] = year_to_evaluate
-                            data["evaluation_month"] = month_to_evaluate
-                            performance_data.append(data)
-                with st.container(border=True):
-                    data = {}
-                    st.subheader(f"{indicator_descriptions[1]}:")
-                    cols = st.columns(4)
-                    with cols[3]:
-                        indicator_id = session.execute(select(Indicator.id).where(Indicator.description==indicator_descriptions[1])).scalar()
-                        criterion_point = st.number_input(label=f" ", min_value=2, max_value=5, value=None)
-                        if criterion_point:
-                            data["user_id"] = user_id_to_evaluate
-                            data["indicator_id"] = indicator_id
-                            data["points"] = criterion_point
-                            data["weighted_points"] = criterion_point * 0.4
-                            data["evaluation_year"] = year_to_evaluate
-                            data["evaluation_month"] = month_to_evaluate
-                            performance_data.append(data)
-                with st.container(border=True):
-                    data = {}
-                    st.subheader(f"{indicator_descriptions[2]}:")
-                    cols = st.columns(4)
-                    with cols[3]:
-                        indicator_id = session.execute(select(Indicator.id).where(Indicator.description==indicator_descriptions[2])).scalar()
-                        working_discipline_point = st.number_input(label=f"   ", min_value=2, max_value=5, value=None)
-                        if working_discipline_point:
-                            data["user_id"] = user_id_to_evaluate
-                            data["indicator_id"] = indicator_id
-                            data["points"] = working_discipline_point
-                            data["weighted_points"] = working_discipline_point * 0.1
-                            data["evaluation_year"] = year_to_evaluate
-                            data["evaluation_month"] = month_to_evaluate
-                            performance_data.append(data)
-                add_data_enabled = task_accomplishment_point and criterion_point and working_discipline_point
-                if st.button(label="Əlavə et", icon=":material/add_circle:", disabled=not add_data_enabled):
-                    with get_db() as conn:
-                        conn.execute(
-                            insert(Performance),
-                                performance_data,
+                st.divider()
+                st.subheader(f"'{fullname_to_evaluate}' üçün balları daxil edin:")
+
+                with st.form("new_performance_form"):
+                    points_data = {}
+                    for indicator in active_indicators:
+                        points_data[indicator.id] = st.number_input(
+                            label=f"**{indicator.description}** (Çəkisi: {indicator.weight * 100:.0f}%)",
+                            min_value=2, max_value=5, value=None, key=f"points_{indicator.id}"
                         )
-                        conn.commit()
-                    popup_successful_operation()
+
+                    submitted = st.form_submit_button("Qiymətləndirməni Əlavə Et")
+
+                    if submitted:
+                        if any(point is None for point in points_data.values()):
+                            st.warning("Zəhmət olmasa, bütün göstəricilər üçün bal daxil edin.")
+                        else:
+                            performance_records_to_add = []
+                            for indicator in active_indicators:
+                                points = points_data[indicator.id]
+                                weighted_points = points * indicator.weight
+                                
+                                performance_records_to_add.append({
+                                    "user_id": user_id_to_evaluate,
+                                    "indicator_id": indicator.id,
+                                    "evaluation_year": year_to_evaluate,
+                                    "evaluation_month": month_to_evaluate,
+                                    "points": points,
+                                    "weighted_points": weighted_points
+                                })
+                            
+                            
+                            session.execute(insert(Performance), performance_records_to_add)
+                            session.commit()
+                            st.success(f"'{fullname_to_evaluate}' üçün qiymətləndirmə uğurla əlavə edildi!")
+                            st.rerun()
 
 def to_excel(df: pd.DataFrame):
     output = io.BytesIO()
@@ -121,35 +114,28 @@ def to_excel(df: pd.DataFrame):
 
 def to_excel_formatted_report(df: pd.DataFrame, employee_name: str, evaluation_period: str):
     output = io.BytesIO()
-    # Sütun adlarını birbaşa yazmaq üçün `header=True` edirik
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Hesabat', startrow=3)
 
         workbook = writer.book
         worksheet = writer.sheets['Hesabat']
-
-        # Formatları təyin edirik
         header_format = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'center', 'valign': 'vcenter'})
         subheader_format = workbook.add_format({'bold': True, 'font_size': 11, 'align': 'left'})
         table_header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#DDEBF7', 'text_wrap': True})
 
-        # Rəsmi başlıqları birləşdirilmiş xanalara yazırıq
         worksheet.merge_range('A1:E1', 'İşçilərin xidməti fəaliyyətinin qiymətləndirilməsi Forması', header_format)
         worksheet.merge_range('A2:E2', 'Naxçıvan İpoteka Fondu ASC', subheader_format)
         worksheet.merge_range('A3:E3', f'Əmək fəaliyyətinin qiymətləndirilməsi aparılan işçi: {employee_name}', subheader_format)
 
-        # Cədvəl başlıqlarının formatını tətbiq edirik
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(3, col_num, value, table_header_format)
         
-        # Sütunların enini təyin edirik
         worksheet.set_column('A:A', 5)   # S/N
         worksheet.set_column('B:B', 60)  # Fəaliyyət üzrə
         worksheet.set_column('C:C', 20)  # Ümumi qiymət
         worksheet.set_column('D:D', 25)  # Faiz bölgüsü
         worksheet.set_column('E:E', 20)  # Yekun nəticə
 
-        # Rəsmi altbilgiləri əlavə edirik
         footer_start_row = 4 + len(df) + 2
         worksheet.write(f'B{footer_start_row}', 'Qeyd: Qiymətləndirmə apardı İdarə Heyəti sədrinin müavini :')
         worksheet.write(f'E{footer_start_row}', 'R.Quliyev')
