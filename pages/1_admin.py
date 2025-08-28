@@ -15,10 +15,8 @@ from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
 
-
 st.sidebar.page_link(page="./pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 download_guide_doc_file()
-
 
 with get_db() as session:
     fullnames = sorted(list(set(session.scalars(select(UserProfile.full_name).join(User, UserProfile.user_id==User.id).where(User.role!="admin", User.is_active==True)).all())))
@@ -41,7 +39,7 @@ with get_db() as session:
             "İşçi seçin:", options=fullnames, index=None, key="report_employee", on_change=employee_changed
         )
         
-        if st.session_state.report_employee:
+        if st.session_state.get("report_employee"):
             report_user_id = session.query(UserProfile.user_id).where(UserProfile.full_name == st.session_state.report_employee).scalar()
             
             if report_user_id:
@@ -53,7 +51,7 @@ with get_db() as session:
                     "İl seçin:", options=available_years, index=None, key="report_year", on_change=year_changed
                 )
 
-                if st.session_state.report_year:
+                if st.session_state.get("report_year"):
                     available_months = sorted(list(set(session.scalars(
                         select(Performance.evaluation_month).where(
                             Performance.user_id == report_user_id, 
@@ -117,16 +115,15 @@ with get_db() as session:
                 st.markdown(html_table, unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                footer_col1, footer_col2 = st.columns([2, 1])
+                footer_col1, footer_col2 = st.columns([3, 1])
                 with footer_col1:
                     st.text("Qeyd: Qiymətləndirmə apardı İdarə Heyəti sədrinin müavini :")
-                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("<br><br>", unsafe_allow_html=True)
                     st.text("İdarə Heyətinin sədri:")
                 with footer_col2:
                     st.text("R.Quliyev")
-                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("<br><br>", unsafe_allow_html=True)
                     st.text("Y.Q.Vəliyev")
-
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 evaluation_period_str = f"{st.session_state.report_month} {st.session_state.report_year}"
@@ -146,10 +143,12 @@ with get_db() as session:
                 st.warning("Seçilmiş dövr üçün məlumat tapılmadı.")
     st.divider()
 
+    # --- Toplu Baxış Hissəsi Dəyişməz Qalır ---
     st.subheader("Bütün Qiymətləndirmələr (Toplu Baxış)")
     st.info("Bu cədvəl məlumatları redaktə etmək üçündür və xüsusi dizayna malik deyil.")
     performance_data = session.execute(select(Performance.id, Performance.user_id, Performance.indicator_id, Performance.evaluation_month, Performance.evaluation_year, Performance.points, Performance.weighted_points)).fetchall()
     if len(performance_data) > 0:
+        # ... (Bu hissənin qalanı olduğu kimi qalır)
         cols = st.columns(5)
         with cols[0]:
             fullnames_chosen = st.multiselect(label="Əməkdaş:", options=fullnames, default=None)
@@ -176,22 +175,15 @@ with get_db() as session:
         df["check_mark"] = False
         df = df[["check_mark", "id", "user_id", "indicator_id", "evaluation_month", "evaluation_year", "points", "weighted_points"]]
         
-        # --- YENİ: Toplu Excel ixracı üçün hazırlıq ---
         df_to_export = df.drop(columns=['check_mark', 'id'])
         if not df_to_export.empty:
-            # Sütun adlarını istəyinizə uyğun dəyişirik
             df_to_export = df_to_export.rename(columns={
-                "user_id": "Əməkdaş",
-                "indicator_id": "Göstərici",
-                "evaluation_month": "Qiymətləndirmə növü",
-                "evaluation_year": "İl",
-                "points": "Bal",
-                "weighted_points": "Yekun Bal"
+                "user_id": "Əməkdaş", "indicator_id": "Göstərici",
+                "evaluation_month": "Qiymətləndirmə növü", "evaluation_year": "İl",
+                "points": "Bal", "weighted_points": "Yekun Bal"
             })
-            # Sütun ardıcıllığını istəyinizə uyğunlaşdırırıq
             desired_order = ["Əməkdaş", "Qiymətləndirmə növü", "İl", "Göstərici", "Bal", "Yekun Bal"]
             df_to_export = df_to_export[desired_order]
-
             excel_data = to_excel(df_to_export)
             st.download_button(label="📥 Bütün siyahını Excel-ə yüklə", data=excel_data, file_name='performance_hesabat_toplu.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         

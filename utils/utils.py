@@ -121,37 +121,41 @@ def to_excel(df: pd.DataFrame):
 
 def to_excel_formatted_report(df: pd.DataFrame, employee_name: str, evaluation_period: str):
     output = io.BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    
-    df.to_excel(writer, index=False, sheet_name='Hesabat', startrow=4, header=False)
+    # Sütun adlarını birbaşa yazmaq üçün `header=True` edirik
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Hesabat', startrow=3)
 
-    workbook = writer.book
-    worksheet = writer.sheets['Hesabat']
+        workbook = writer.book
+        worksheet = writer.sheets['Hesabat']
 
-    header_format = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'center'})
-    subheader_format = workbook.add_format({'bold': True, 'font_size': 11})
-    table_header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#DDEBF7'})
-    
-    worksheet.merge_range('A1:E1', 'İşçilərin xidməti fəaliyyətinin qiymətləndirilməsi Forması', header_format)
-    worksheet.merge_range('A2:E2', 'Naxçıvan İpoteka Fondu ASC', subheader_format)
-    worksheet.merge_range('A3:E3', f'Əmək fəaliyyətinin qiymətləndirilməsi aparılan işçi: {employee_name}', subheader_format)
+        # Formatları təyin edirik
+        header_format = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'center', 'valign': 'vcenter'})
+        subheader_format = workbook.add_format({'bold': True, 'font_size': 11, 'align': 'left'})
+        table_header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter', 'bg_color': '#DDEBF7', 'text_wrap': True})
 
-    for col_num, value in enumerate(df.columns.values):
-        worksheet.write(4, col_num, value, table_header_format)
+        # Rəsmi başlıqları birləşdirilmiş xanalara yazırıq
+        worksheet.merge_range('A1:E1', 'İşçilərin xidməti fəaliyyətinin qiymətləndirilməsi Forması', header_format)
+        worksheet.merge_range('A2:E2', 'Naxçıvan İpoteka Fondu ASC', subheader_format)
+        worksheet.merge_range('A3:E3', f'Əmək fəaliyyətinin qiymətləndirilməsi aparılan işçi: {employee_name}', subheader_format)
 
-    footer_start_row = 4 + len(df) + 3
-    worksheet.write(f'B{footer_start_row}', 'Qeyd: Qiymətləndirmə apardı İdarə Heyəti sədrinin müavini :')
-    worksheet.write(f'E{footer_start_row}', 'R.Quliyev')
-    worksheet.write(f'B{footer_start_row + 2}', 'İdarə Heyətinin sədri:')
-    worksheet.write(f'E{footer_start_row + 2}', 'Y.Q.Vəliyev')
+        # Cədvəl başlıqlarının formatını tətbiq edirik
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(3, col_num, value, table_header_format)
+        
+        # Sütunların enini təyin edirik
+        worksheet.set_column('A:A', 5)   # S/N
+        worksheet.set_column('B:B', 60)  # Fəaliyyət üzrə
+        worksheet.set_column('C:C', 20)  # Ümumi qiymət
+        worksheet.set_column('D:D', 25)  # Faiz bölgüsü
+        worksheet.set_column('E:E', 20)  # Yekun nəticə
 
-    worksheet.set_column('A:A', 5)
-    worksheet.set_column('B:B', 70)
-    worksheet.set_column('C:C', 20)
-    worksheet.set_column('D:D', 30)
-    worksheet.set_column('E:E', 25)
+        # Rəsmi altbilgiləri əlavə edirik
+        footer_start_row = 4 + len(df) + 2
+        worksheet.write(f'B{footer_start_row}', 'Qeyd: Qiymətləndirmə apardı İdarə Heyəti sədrinin müavini :')
+        worksheet.write(f'E{footer_start_row}', 'R.Quliyev')
+        worksheet.write(f'B{footer_start_row + 2}', 'İdarə Heyətinin sədri:')
+        worksheet.write(f'E{footer_start_row + 2}', 'Y.Q.Vəliyev')
 
-    writer.close()
     processed_data = output.getvalue()
     return processed_data
 
