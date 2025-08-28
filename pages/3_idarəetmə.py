@@ -19,11 +19,65 @@ logout()
 st.title("İdarəetmə Paneli")
 st.divider()
 
-st.header("İstifadəçi İdarəetməsi")
+# --- Yeni İstifadəçi Yaratmaq Bölməsi ---
+with st.expander("➕ Yeni İstifadəçi Yarat"):
+    with st.form("new_user_form", clear_on_submit=True):
+        st.subheader("Yeni İstifadəçinin Məlumatları")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            # Giriş məlumatları
+            new_username = st.text_input("İstifadəçi Adı (login üçün)")
+            new_password = st.text_input("Şifrə", type="password")
+            new_role = st.selectbox("Rolu", ["user", "admin"])
+        
+        with col2:
+            # Profil məlumatları
+            new_full_name = st.text_input("Tam Adı (Ad, Soyad)")
+            new_position = st.text_input("Vəzifəsi")
+
+        submitted = st.form_submit_button("Yeni İstifadəçini Yarat")
+
+        if submitted:
+            # Bütün xanaların dolu olub-olmadığını yoxlayırıq
+            if not all([new_username, new_password, new_role, new_full_name, new_position]):
+                st.warning("Zəhmət olmasa, bütün xanaları doldurun.")
+            else:
+                with get_db() as session:
+                    # Eyni istifadəçi adının mövcud olub-olmadığını yoxlayırıq
+                    existing_user = session.query(User).filter(User.username == new_username).first()
+                    if existing_user:
+                        st.error(f"'{new_username}' adlı istifadəçi artıq mövcuddur. Fərqli ad seçin.")
+                    else:
+                        # Əvvəlcə "user" cədvəlinə əlavə edirik
+                        user_to_add = User(
+                            username=new_username,
+                            password=new_password, # Qeyd: Şifrə hələ də açıq mətn şəklindədir
+                            role=new_role
+                        )
+                        session.add(user_to_add)
+                        session.commit()
+                        session.refresh(user_to_add) # Yeni yaranan istifadəçinin ID-sini almaq üçün
+
+                        # Sonra "user_profile" cədvəlinə əlavə edirik
+                        profile_to_add = UserProfile(
+                            user_id=user_to_add.id,
+                            full_name=new_full_name,
+                            position=new_position
+                        )
+                        session.add(profile_to_add)
+                        session.commit()
+
+                        st.success(f"İstifadəçi '{new_full_name}' uğurla yaradıldı!")
+                        # st.rerun() # Səhifənin avtomatik yenilənməsi üçün (istəyə bağlı)
+
+st.divider()
+
+# --- Mövcud İstifadəçilər Bölməsi ---
+st.header("Mövcud İstifadəçilər")
 
 try:
     with get_db() as session:
-        # User və UserProfile cədvəllərini birləşdirərək bütün məlumatları alırıq
         users_query = session.query(
             User.id,
             User.username,
@@ -36,13 +90,9 @@ try:
         users_data = users_query.all()
 
         if users_data:
-            # Məlumatları anlaşılan adlarla DataFrame-ə çeviririk
             df_users = pd.DataFrame(users_data, columns=[
                 "ID", "İstifadəçi Adı", "Tam Adı", "Vəzifəsi", "Rolu", "Aktivdir"
             ])
-            
-            st.info("Aşağıdakı cədvəldə mövcud istifadəçilər göstərilib. Növbəti addımda redaktə və yeni istifadəçi yaratmaq funksiyalarını əlavə edəcəyik.")
-            # Cədvəli ekranda göstəririk
             st.dataframe(df_users, use_container_width=True)
         else:
             st.warning("Verilənlər bazasında heç bir istifadəçi tapılmadı.")
