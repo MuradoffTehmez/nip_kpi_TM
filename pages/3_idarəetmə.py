@@ -11,6 +11,7 @@ st.set_page_config(layout="wide")
 
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
+st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:") #<-- BU SƏTRİ ƏLAVƏ EDİN
 download_guide_doc_file()
 logout()
 
