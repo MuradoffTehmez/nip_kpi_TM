@@ -96,7 +96,6 @@ with get_db() as session:
                 })
                 report_df = pd.DataFrame(report_data)
 
-                # Sütun adlarını rəsmi sənədə uyğunlaşdırırıq
                 report_df_styled = report_df.rename(columns={
                     "Ümumi qiymət": "Ümumi qiymət (2,3,4,5)",
                     "Yekun qiymətin faiz bölgüsü": "Yekun qiymətin faiz bölgüsü (50,40,10)"
@@ -104,7 +103,6 @@ with get_db() as session:
 
                 st.markdown("---")
                 
-                # Rəsmi başlıqları əlavə edirik
                 st.subheader("İşçilərin xidməti fəaliyyətinin qiymətləndirilməsi Forması")
                 st.text("Naxçıvan İpoteka Fondu ASC")
                 st.text(f'Əmək fəaliyyətinin qiymətləndirilməsi aparılan işçi: {st.session_state.report_employee}')
@@ -115,11 +113,9 @@ with get_db() as session:
                     'left': ['Fəaliyyət üzrə']
                 }
                 
-                # Stil verilmiş DataFrame-i istifadə edirik
                 html_table = get_styled_table_html(report_df_styled.fillna(''), formatters=report_formatters, alignments=report_alignments)
                 st.markdown(html_table, unsafe_allow_html=True)
 
-                # Rəsmi altbilgiləri əlavə edirik
                 st.markdown("<br>", unsafe_allow_html=True)
                 footer_col1, footer_col2 = st.columns([2, 1])
                 with footer_col1:
@@ -135,7 +131,6 @@ with get_db() as session:
                 
                 evaluation_period_str = f"{st.session_state.report_month} {st.session_state.report_year}"
                 
-                # Excel faylına da stil verilmiş DataFrame-i göndəririk
                 excel_report = to_excel_formatted_report(
                     df=report_df_styled.fillna(''), 
                     employee_name=st.session_state.report_employee,
@@ -165,11 +160,11 @@ with get_db() as session:
             if not indicators_chosen: indicators_chosen = indicator_descriptions
             indicator_ids = session.scalars(select(Indicator.id).where(Indicator.description.in_(indicators_chosen))).all()
         with cols[2]:
-            years = list(set(session.scalars(select(Performance.evaluation_year).where(Performance.user_id.in_(user_ids), Performance.indicator_id.in_(indicator_ids))).all()))
+            years = sorted(list(set(session.scalars(select(Performance.evaluation_year).where(Performance.user_id.in_(user_ids), Performance.indicator_id.in_(indicator_ids))).all())))
             years_chosen = st.multiselect(label="İl:", options=years, default=None)
             if not years_chosen: years_chosen = years
         with cols[3]:
-            months = list(set(session.scalars(select(Performance.evaluation_month).where(Performance.evaluation_year.in_(years_chosen))).all()))
+            months = sorted(list(set(session.scalars(select(Performance.evaluation_month).where(Performance.evaluation_year.in_(years_chosen))).all())))
             months_chosen = st.multiselect(label="Qiymətləndirmə növü:", options=months, default=None)
             if not months_chosen: months_chosen = months
         user_id_name_map = dict(session.execute(select(UserProfile.user_id, UserProfile.full_name)).fetchall())
@@ -180,8 +175,23 @@ with get_db() as session:
         df = df[(df["user_id"].isin(fullnames_chosen)) & (df["indicator_id"].isin(indicators_chosen)) & (df["evaluation_year"].isin(years_chosen)) & (df["evaluation_month"].isin(months_chosen))]
         df["check_mark"] = False
         df = df[["check_mark", "id", "user_id", "indicator_id", "evaluation_month", "evaluation_year", "points", "weighted_points"]]
+        
+        # --- YENİ: Toplu Excel ixracı üçün hazırlıq ---
         df_to_export = df.drop(columns=['check_mark', 'id'])
         if not df_to_export.empty:
+            # Sütun adlarını istəyinizə uyğun dəyişirik
+            df_to_export = df_to_export.rename(columns={
+                "user_id": "Əməkdaş",
+                "indicator_id": "Göstərici",
+                "evaluation_month": "Qiymətləndirmə növü",
+                "evaluation_year": "İl",
+                "points": "Bal",
+                "weighted_points": "Yekun Bal"
+            })
+            # Sütun ardıcıllığını istəyinizə uyğunlaşdırırıq
+            desired_order = ["Əməkdaş", "Qiymətləndirmə növü", "İl", "Göstərici", "Bal", "Yekun Bal"]
+            df_to_export = df_to_export[desired_order]
+
             excel_data = to_excel(df_to_export)
             st.download_button(label="📥 Bütün siyahını Excel-ə yüklə", data=excel_data, file_name='performance_hesabat_toplu.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         
