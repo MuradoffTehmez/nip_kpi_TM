@@ -96,22 +96,48 @@ with get_db() as session:
                 })
                 report_df = pd.DataFrame(report_data)
 
+                # Sütun adlarını rəsmi sənədə uyğunlaşdırırıq
+                report_df_styled = report_df.rename(columns={
+                    "Ümumi qiymət": "Ümumi qiymət (2,3,4,5)",
+                    "Yekun qiymətin faiz bölgüsü": "Yekun qiymətin faiz bölgüsü (50,40,10)"
+                })
+
                 st.markdown("---")
-                st.markdown(f"**Əməkdaş:** {st.session_state.report_employee}")
-                st.markdown(f"**Qiymətləndirmə dövrü:** {st.session_state.report_month} {st.session_state.report_year}")
+                
+                # Rəsmi başlıqları əlavə edirik
+                st.subheader("İşçilərin xidməti fəaliyyətinin qiymətləndirilməsi Forması")
+                st.text("Naxçıvan İpoteka Fondu ASC")
+                st.text(f'Əmək fəaliyyətinin qiymətləndirilməsi aparılan işçi: {st.session_state.report_employee}')
                 
                 report_formatters = {"Yekun nəticə faizlə": "{:.2f}"}
                 report_alignments = {
-                    'center': ['S/N', 'Ümumi qiymət', 'Yekun qiymətin faiz bölgüsü'],
+                    'center': ['S/N', 'Ümumi qiymət (2,3,4,5)', 'Yekun qiymətin faiz bölgüsü (50,40,10)'],
                     'left': ['Fəaliyyət üzrə']
                 }
                 
-                html_table = get_styled_table_html(report_df, formatters=report_formatters, alignments=report_alignments)
+                # Stil verilmiş DataFrame-i istifadə edirik
+                html_table = get_styled_table_html(report_df_styled.fillna(''), formatters=report_formatters, alignments=report_alignments)
                 st.markdown(html_table, unsafe_allow_html=True)
+
+                # Rəsmi altbilgiləri əlavə edirik
+                st.markdown("<br>", unsafe_allow_html=True)
+                footer_col1, footer_col2 = st.columns([2, 1])
+                with footer_col1:
+                    st.text("Qeyd: Qiymətləndirmə apardı İdarə Heyəti sədrinin müavini :")
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.text("İdarə Heyətinin sədri:")
+                with footer_col2:
+                    st.text("R.Quliyev")
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.text("Y.Q.Vəliyev")
+
+                st.markdown("<br>", unsafe_allow_html=True)
                 
                 evaluation_period_str = f"{st.session_state.report_month} {st.session_state.report_year}"
+                
+                # Excel faylına da stil verilmiş DataFrame-i göndəririk
                 excel_report = to_excel_formatted_report(
-                    df=report_df.fillna(''), 
+                    df=report_df_styled.fillna(''), 
                     employee_name=st.session_state.report_employee,
                     evaluation_period=evaluation_period_str
                 )
