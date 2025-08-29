@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(layout="wide")
+
 import pandas as pd
 from sqlalchemy import select, update, func
 from database import get_db
@@ -7,7 +9,6 @@ from models.user_profile import UserProfile
 from models.indicator import Indicator
 from utils.utils import download_guide_doc_file, logout
 
-st.set_page_config(layout="wide")
 
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")

@@ -44,6 +44,7 @@ def add_data():
             .where(User.role != "admin", User.is_active == True)
         ).all())))
         
+        # Bütün aktiv göstəriciləri bazadan oxuyuruq
         active_indicators = session.query(Indicator).filter(Indicator.is_active == True).all()
 
         cols = st.columns(3)
@@ -97,7 +98,6 @@ def add_data():
                                     "points": points,
                                     "weighted_points": weighted_points
                                 })
-                            
                             
                             session.execute(insert(Performance), performance_records_to_add)
                             session.commit()

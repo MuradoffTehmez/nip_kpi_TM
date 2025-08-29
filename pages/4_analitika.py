@@ -1,4 +1,6 @@
 import streamlit as st
+st.set_page_config(layout="wide")
+
 import pandas as pd
 import altair as alt
 from sqlalchemy import select, func
@@ -8,20 +10,18 @@ from models.user_profile import UserProfile
 from models.performance import Performance
 from utils.utils import download_guide_doc_file, logout
 
-st.set_page_config(layout="wide")
 
-# --- Kənar Panel (Sidebar) ---
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
 st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:")
 download_guide_doc_file()
 logout()
-# --- Kənar Panelin Sonu ---
+
 
 st.title("📊 Analitika Paneli")
 st.divider()
 
-# --- Filtr Bölməsi ---
+
 with get_db() as session:
     available_years = sorted(list(set(session.scalars(select(Performance.evaluation_year)).all())), reverse=True)
     available_months = sorted(list(set(session.scalars(select(Performance.evaluation_month)).all())))
@@ -34,7 +34,7 @@ with col2:
 
 st.divider()
 
-# --- Analitika Məzmunu ---
+
 if selected_year and selected_month:
     with get_db() as session:
         performance_query = session.query(
@@ -52,18 +52,14 @@ if selected_year and selected_month:
         performance_data = performance_query.all()
 
         if performance_data:
-            # === DÜZƏLİŞ BURADADIR ===
-            # 1. Cədvəli yaradırıq (sütun adlarını bazadan gəldiyi kimi götürür)
+         
             df_performance = pd.DataFrame(performance_data)
-            
-            # 2. Sütunları anlaşılan adlarla əvəz edirik
+       
             df_performance = df_performance.rename(columns={
                 "full_name": "Əməkdaş",
                 "total_score": "Yekun Bal"
             })
-            # === DÜZƏLİŞİN SONU ===
             
-            # --- Əsas Göstəricilər (Metrics) ---
             st.header("Ümumi Nəticələr")
             col1, col2 = st.columns(2)
             with col1:
@@ -74,7 +70,6 @@ if selected_year and selected_month:
             
             st.divider()
 
-            # --- Qrafik 1: İşçilərin Müqayisəsi (Bar Chart) ---
             st.header("İşçilərin Performans Müqayisəsi")
             bar_chart = alt.Chart(df_performance).mark_bar().encode(
                 x=alt.X('Yekun Bal:Q', title="Yekun Bal"),
@@ -87,7 +82,6 @@ if selected_year and selected_month:
 
             st.divider()
 
-            # --- Qrafik 2: Performans Səviyyələrinin Paylanması (Pie Chart) ---
             st.header("Performans Səviyyələrinin Paylanması")
             
             def get_performance_level(score):

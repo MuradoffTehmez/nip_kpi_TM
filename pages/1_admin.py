@@ -1,19 +1,19 @@
 import streamlit as st
+st.set_page_config(layout="wide")
+
 import pandas as pd
 import numpy as np
 from streamlit_cookies_controller import CookieController
-controller = CookieController()
-
-st.set_page_config(layout="wide")
-
 from sqlalchemy import select, update, delete
 from database import get_db
 from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html
-
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
+
+
+controller = CookieController()
 
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
@@ -170,7 +170,6 @@ with get_db() as session:
         user_id_name_map = dict(session.execute(select(UserProfile.user_id, UserProfile.full_name)).fetchall())
         indicator_id_description_map = {id: desc for id, desc, w in indicators_from_db}
         
-        # Original DataFrame for data_editor
         df_for_editor = pd.DataFrame(data=performance_data)
         df_for_editor["user_id"] = df_for_editor["user_id"].map(user_id_name_map)
         df_for_editor["indicator_id"] = df_for_editor["indicator_id"].map(indicator_id_description_map)
@@ -178,16 +177,13 @@ with get_db() as session:
         df_for_editor["check_mark"] = False
         df_for_editor = df_for_editor[["check_mark", "id", "user_id", "indicator_id", "evaluation_month", "evaluation_year", "points", "weighted_points"]]
         
-        # DataFrame for Excel export
-        df_to_export = pd.DataFrame(data=performance_data) # Re-fetch or copy to keep original IDs
-        df_to_export = df_to_export[df_to_export['id'].isin(df_for_editor['id'])] # Filter same as editor
+        df_to_export = pd.DataFrame(data=performance_data) 
+        df_to_export = df_to_export[df_to_export['id'].isin(df_for_editor['id'])] 
         
         if not df_to_export.empty:
-            # Map IDs to names for the export file
             df_to_export["user_id"] = df_to_export["user_id"].map(user_id_name_map)
             df_to_export["indicator_id"] = df_to_export["indicator_id"].map(indicator_id_description_map)
 
-            # Rename columns for the export file
             df_to_export = df_to_export.rename(columns={
                 "user_id": "Əməkdaş",
                 "indicator_id": "Göstərici",
@@ -197,14 +193,12 @@ with get_db() as session:
                 "weighted_points": "Yekun Bal"
             })
             
-            # Reorder columns as requested
             desired_order = ["Əməkdaş", "Qiymətləndirmə növü", "İl", "Göstərici", "Bal", "Yekun Bal"]
             df_to_export = df_to_export[desired_order]
             
             excel_data = to_excel(df_to_export)
             st.download_button(label="📥 Bütün siyahını Excel-ə yüklə", data=excel_data, file_name='performance_hesabat_toplu.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
-        # Data editor uses the version with original column names
         edited_df = st.data_editor(data=df_for_editor, hide_index=True, column_config={"check_mark": st.column_config.CheckboxColumn(label="", width=1), "id": st.column_config.NumberColumn(label="#id", width=1, disabled=True), "user_id": st.column_config.TextColumn(label="Əməkdaş", width=200, disabled=True), "indicator_id": st.column_config.TextColumn(label="Göstərici", width="large", disabled=True), "evaluation_month": st.column_config.TextColumn(label="Qiymətləndirmə növü", width=80, disabled=True), "evaluation_year": st.column_config.NumberColumn(label="İl", width=30, disabled=True), "points": st.column_config.NumberColumn(label="Bal", min_value=2, max_value=5, width=30), "weighted_points": st.column_config.NumberColumn(label="Yekun bal", width=30, disabled=True),})
         checked_ids = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
         edited_data = {}

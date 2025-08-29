@@ -1,4 +1,8 @@
 import streamlit as st
+st.set_page_config(layout="wide")
+
+
+
 import pandas as pd
 import plotly.express as px
 from streamlit_cookies_controller import CookieController
@@ -12,7 +16,7 @@ from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
 
-st.set_page_config(layout="wide")
+
 
 st.sidebar.page_link(page="pages/2_user.py", label="Nəticələrim", icon=":material/analytics:")
 download_guide_doc_file()
