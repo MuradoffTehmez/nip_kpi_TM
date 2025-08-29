@@ -28,7 +28,7 @@ def logout():
     with st.sidebar:
         st.divider()
         if st.button(label="Çıxış", icon=":material/logout:"):
-            controller.delete("user_id")
+            controller.set("user_id", None, max_age=0)
             st.switch_page(page="main.py")
 
 @st.dialog("Uğurlu əməliyyat!")
@@ -44,7 +44,6 @@ def add_data():
             .where(User.role != "admin", User.is_active == True)
         ).all())))
         
-        # Bütün aktiv göstəriciləri bazadan oxuyuruq
         active_indicators = session.query(Indicator).filter(Indicator.is_active == True).all()
 
         cols = st.columns(3)
