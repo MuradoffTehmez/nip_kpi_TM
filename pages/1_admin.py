@@ -20,6 +20,7 @@ st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon="
 st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:")
 st.sidebar.page_link(page="pages/9_debug.py", label="DEBUG SƏHİFƏSİ", icon="🐞")
 download_guide_doc_file()
+logout()
 
 with get_db() as session:
     fullnames = sorted(list(set(session.scalars(select(UserProfile.full_name).join(User, UserProfile.user_id==User.id).where(User.role!="admin", User.is_active==True)).all())))
@@ -246,4 +247,3 @@ with get_db() as session:
             add_data()
     else:
         add_data()
-logout()

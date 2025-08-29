@@ -28,9 +28,9 @@ def logout():
     with st.sidebar:
         st.divider()
         if st.button(label="Çıxış", icon=":material/logout:"):
-            controller.set("user_id", None, max_age=0)
-            st.switch_page(page="main.py")
-
+            st.query_params["logout"] = "true"
+            st.switch_page("main.py")
+            
 @st.dialog("Uğurlu əməliyyat!")
 def popup_successful_operation():
     if st.button(label="", icon=":material/thumb_up:"):

@@ -3,9 +3,18 @@ from streamlit_cookies_controller import CookieController
 from database import get_db
 from models.user import User
 
+# Səhifənin ilkin konfiqurasiyası
 st.set_page_config(layout="centered", page_title="KPI Sistemi - Giriş")
 
 controller = CookieController()
+
+# Çıxış siqnalını yoxlamaq üçün məntiq
+if st.query_params.get("logout") == "true":
+    controller.set("user_id", None, max_age=0)
+    st.query_params.clear()
+    st.rerun()
+
+# Cookie vasitəsilə avtomatik giriş məntiqi
 user_id_from_cookie = controller.get("user_id")
 if user_id_from_cookie:
     with get_db() as session:
@@ -17,9 +26,8 @@ if user_id_from_cookie:
                 st.switch_page(page="pages/2_user.py")
             st.stop()
 
-# Loqo
-# st.image("https://www.nif.gov.az/themes/custom/nif/logo.svg", width=300)
 
+st.image("https://www.nif.gov.az/themes/custom/nif/logo.svg", width=300)
 st.title("NİF - Fəaliyyətin Qiymətləndirilməsi Portalı")
 st.write("Davam etmək üçün zəhmət olmasa, sistemə daxil olun.")
 
@@ -34,8 +42,7 @@ with st.container(border=True):
         placeholder="Şifrənizi daxil edin"
     )
     remember_me = st.checkbox("Məni xatırla")
-
-    st.markdown("---") 
+    st.markdown("---")
 
     if st.button("Daxil ol", type="primary", use_container_width=True):
         if username and password:
@@ -44,7 +51,7 @@ with st.container(border=True):
                 
                 if user and user.password == password:
                     if remember_me:
-                        max_age = 30 * 24 * 60 * 60  # 30 gün
+                        max_age = 30 * 24 * 60 * 60
                         controller.set("user_id", user.id, max_age=max_age)
                     else:
                         controller.set("user_id", user.id)
