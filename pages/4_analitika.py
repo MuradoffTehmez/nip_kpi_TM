@@ -18,7 +18,7 @@ download_guide_doc_file()
 logout()
 
 
-st.title("📊 Analitika Paneli")
+st.title("Analitika Paneli")
 st.divider()
 
 

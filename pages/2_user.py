@@ -1,8 +1,5 @@
 import streamlit as st
 st.set_page_config(layout="wide")
-
-
-
 import pandas as pd
 import plotly.express as px
 from streamlit_cookies_controller import CookieController
@@ -10,13 +7,10 @@ from sqlalchemy import select
 from database import get_db
 from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html
 from data.months_in_azeri import evaluation_types
-
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
-
-
 
 st.sidebar.page_link(page="pages/2_user.py", label="Nəticələrim", icon=":material/analytics:")
 download_guide_doc_file()
@@ -29,7 +23,6 @@ if not user_id:
     st.error("Zəhmət olmasa, nəticələrə baxmaq üçün sistemə daxil olun.")
     st.page_link("main.py", label="Giriş Səhifəsinə Qayıt", icon="🏠")
     st.stop()
-
 
 @st.cache_data
 def load_user_data(user_id):
@@ -49,12 +42,13 @@ def load_user_data(user_id):
         df = pd.DataFrame(user_performance_data, columns=["indicator_id", "evaluation_month", "evaluation_year", "points", "weighted_points"])
         indicator_description_map = {id: desc for id, desc, w in indicators_from_db}
         df["Göstərici"] = df["indicator_id"].map(indicator_description_map)
-        df.rename(columns={
+        
+        df = df.rename(columns={
             "evaluation_month": "Qiymətləndirmə növü", "evaluation_year": "İl",
             "points": "Bal", "weighted_points": "Yekun Bal"
-        }, inplace=True)
+        })
         
-        return df, indicator_id_map, current_user_name
+        return df.copy(), indicator_id_map, current_user_name
 
 df_performance, indicator_id_map, current_user_name = load_user_data(user_id)
 
