@@ -50,6 +50,7 @@ with st.container(border=True):
                 user: User = session.query(User).where(User.username == username, User.is_active == True).scalar()
                 
                 if user and user.password == password:
+                    st.session_state['user_id'] = user.id
                     if remember_me:
                         max_age = 30 * 24 * 60 * 60
                         controller.set("user_id", user.id, max_age=max_age)
