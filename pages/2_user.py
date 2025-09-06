@@ -5,12 +5,14 @@ import plotly.express as px
 from streamlit_cookies_controller import CookieController
 from sqlalchemy import select
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html
+from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html, check_login
 from data.months_in_azeri import evaluation_types
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
+
+current_user = check_login()
 
 st.sidebar.page_link(page="pages/2_user.py", label="Nəticələrim", icon=":material/analytics:")
 download_guide_doc_file()
@@ -18,11 +20,6 @@ logout()
 
 controller = CookieController()
 user_id = controller.get("user_id")
-
-if not user_id:
-    st.error("Zəhmət olmasa, nəticələrə baxmaq üçün sistemə daxil olun.")
-    st.page_link("main.py", label="Giriş Səhifəsinə Qayıt", icon="🏠")
-    st.stop()
 
 @st.cache_data
 def load_user_data(user_id):

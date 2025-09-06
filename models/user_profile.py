@@ -1,5 +1,5 @@
 from sqlalchemy import Integer, String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 from models.user import User
@@ -12,3 +12,6 @@ class UserProfile(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey(column=User.id, name="fk_user_profile_user_id", ondelete="CASCADE"), nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     position: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Relationship to User
+    user = relationship("User", back_populates="profile")

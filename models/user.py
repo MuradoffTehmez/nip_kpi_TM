@@ -1,5 +1,5 @@
 from sqlalchemy import Integer, String, Boolean, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from passlib.context import CryptContext
 
@@ -15,6 +15,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
+    # Relationship to UserProfile
+    profile = relationship("UserProfile", back_populates="user", uselist=False)
+
     def set_password(self, password: str):
         """Hash and set the user's password"""
         self.password = pwd_context.hash(password)
@@ -22,3 +25,9 @@ class User(Base):
     def verify_password(self, password: str) -> bool:
         """Verify a password against the hashed password"""
         return pwd_context.verify(password, self.password)
+
+    def get_full_name(self) -> str:
+        """Get the full name from the associated profile"""
+        if self.profile:
+            return self.profile.full_name
+        return "Naməlum"

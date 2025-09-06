@@ -8,7 +8,12 @@ from database import get_db
 from models.user import User
 from models.user_profile import UserProfile
 from models.performance import Performance
-from utils.utils import download_guide_doc_file, logout
+from utils.utils import download_guide_doc_file, logout, check_login
+
+current_user = check_login()
+if current_user.role != "admin":
+    st.error("Bu səhifəyə giriş üçün icazəniz yoxdur.")
+    st.stop()
 
 
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")

@@ -17,15 +17,17 @@ if st.query_params.get("logout") == "true":
 # Cookie vasitəsilə avtomatik giriş məntiqi
 user_id_from_cookie = controller.get("user_id")
 if user_id_from_cookie:
-    with get_db() as session:
-        user = session.query(User).where(User.id == user_id_from_cookie, User.is_active == True).scalar()
-        if user:
-            if user.role == "admin":
-                st.switch_page(page="pages/1_admin.py")
-            elif user.role == "user":
-                st.switch_page(page="pages/2_user.py")
-            st.stop()
-
+    try:
+        with get_db() as session:
+            user = session.query(User).where(User.id == user_id_from_cookie, User.is_active == True).scalar()
+            if user:
+                if user.role == "admin":
+                    st.switch_page(page="pages/1_admin.py")
+                elif user.role == "user":
+                    st.switch_page(page="pages/2_user.py")
+                st.stop()
+    except Exception as e:
+        st.error(f"Giriş yoxlaması zamanı xəta baş verdi: {str(e)}")
 
 st.image("https://www.nif.gov.az/themes/custom/nif/logo.svg", width=300)
 st.title("NİF - Fəaliyyətin Qiymətləndirilməsi Portalı")
@@ -46,22 +48,25 @@ with st.container(border=True):
 
     if st.button("Daxil ol", type="primary", use_container_width=True):
         if username and password:
-            with get_db() as session:
-                user: User = session.query(User).where(User.username == username, User.is_active == True).scalar()
-                
-                if user and user.verify_password(password):
-                    st.session_state['user_id'] = user.id
-                    if remember_me:
-                        max_age = 30 * 24 * 60 * 60
-                        controller.set("user_id", user.id, max_age=max_age)
-                    else:
-                        controller.set("user_id", user.id)
+            try:
+                with get_db() as session:
+                    user: User = session.query(User).where(User.username == username, User.is_active == True).scalar()
+                    
+                    if user and user.verify_password(password):
+                        st.session_state['user_id'] = user.id
+                        if remember_me:
+                            max_age = 30 * 24 * 60 * 60
+                            controller.set("user_id", user.id, max_age=max_age)
+                        else:
+                            controller.set("user_id", user.id)
 
-                    if user.role == "admin":
-                        st.switch_page(page="pages/1_admin.py")
-                    elif user.role == "user":
-                        st.switch_page(page="pages/2_user.py")
-                else:
-                    st.error("İstifadəçi adı və ya şifrə yanlışdır!")
+                        if user.role == "admin":
+                            st.switch_page(page="pages/1_admin.py")
+                        elif user.role == "user":
+                            st.switch_page(page="pages/2_user.py")
+                    else:
+                        st.error("İstifadəçi adı və ya şifrə yanlışdır!")
+            except Exception as e:
+                st.error(f"Giriş zamanı xəta baş verdi: {str(e)}")
         else:
             st.warning("Zəhmət olmasa, bütün xanaları doldurun!")

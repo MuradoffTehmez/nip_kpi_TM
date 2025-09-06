@@ -6,12 +6,16 @@ import numpy as np
 from streamlit_cookies_controller import CookieController
 from sqlalchemy import select, update, delete
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html
+from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html, check_login
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
 from models.performance import Performance
 
+current_user = check_login()
+if current_user.role != "admin":
+    st.error("Bu səhifəyə giriş üçün icazəniz yoxdur.")
+    st.stop()
 
 controller = CookieController()
 
@@ -222,21 +226,27 @@ with get_db() as session:
         cols = st.columns(8)
         with cols[0]:
             if st.button(label="Dəyişdir", icon=":material/edit_note:", disabled=not data_edited):
-                for performance_id, values in edited_data.items():
-                    with get_db() as conn:
-                        conn.execute(update(Performance).where(Performance.id==performance_id).values(values))
-                        conn.commit()
-                popup_successful_operation()
+                try:
+                    for performance_id, values in edited_data.items():
+                        with get_db() as conn:
+                            conn.execute(update(Performance).where(Performance.id==performance_id).values(values))
+                            conn.commit()
+                    popup_successful_operation()
+                except Exception as e:
+                    st.error(f"Məlumatları yeniləyərkən xəta baş verdi: {str(e)}")
         @st.dialog("Silmək istədiyinizə əminsinizmi?")
         def popup_delete():
             button_cols = st.columns(6)
             with button_cols[0]:
                 if st.button(label="Bəli"):
-                    ids_to_delete = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
-                    with get_db() as conn:
-                        conn.execute(delete(Performance).where(Performance.id.in_(ids_to_delete)))
-                        conn.commit()
-                    st.rerun()
+                    try:
+                        ids_to_delete = list(edited_df.loc[edited_df["check_mark"]==True, "id"])
+                        with get_db() as conn:
+                            conn.execute(delete(Performance).where(Performance.id.in_(ids_to_delete)))
+                            conn.commit()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Məlumatları silərkən xəta baş verdi: {str(e)}")
             with button_cols[1]:
                 if st.button(label="Xeyr"): st.rerun()
         with cols[1]:
