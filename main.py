@@ -49,7 +49,7 @@ with st.container(border=True):
             with get_db() as session:
                 user: User = session.query(User).where(User.username == username, User.is_active == True).scalar()
                 
-                if user and user.password == password:
+                if user and user.verify_password(password):
                     st.session_state['user_id'] = user.id
                     if remember_me:
                         max_age = 30 * 24 * 60 * 60

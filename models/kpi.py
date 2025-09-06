@@ -49,8 +49,8 @@ class Evaluation(Base):
     id = Column(Integer, primary_key=True)
     
     period_id = Column(Integer, ForeignKey('evaluation_periods.id'), nullable=False)
-    evaluated_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    evaluator_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    evaluated_user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    evaluator_user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
     
     status = Column(Enum(EvaluationStatus), default=EvaluationStatus.PENDING, nullable=False)
     

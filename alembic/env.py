@@ -11,6 +11,7 @@ from models.user import User
 from models.user_profile import UserProfile
 from models.indicator import Indicator
 from models.performance import Performance
+from models.kpi import EvaluationPeriod, Question, Evaluation, Answer
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

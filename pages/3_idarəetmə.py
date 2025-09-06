@@ -42,7 +42,8 @@ with tab1:
                         if existing_user:
                             st.error(f"'{new_username}' adlı istifadəçi artıq mövcuddur. Fərqli ad seçin.")
                         else:
-                            user_to_add = User(username=new_username, password=new_password, role=new_role)
+                            user_to_add = User(username=new_username, role=new_role)
+                            user_to_add.set_password(new_password)
                             session.add(user_to_add)
                             session.commit()
                             session.refresh(user_to_add)
