@@ -42,7 +42,9 @@ class Question(Base):
 
 class EvaluationStatus(enum.Enum):
     PENDING = "GÖZLƏMƏDƏ"
-    COMPLETED = "TAMAMLANMIŞ"
+    SELF_EVAL_COMPLETED = "İŞÇİ DƏYƏRLƏNDİRDİ"
+    MANAGER_REVIEW_COMPLETED = "RƏHBƏR DƏYƏRLƏNDİRDİ"
+    FINALIZED = "YEKUNLAŞDIRILDI"
 
 class Evaluation(Base):
     """ Konkret qiymətləndirmə tapşırığı (kim kimi qiymətləndirəcək) """

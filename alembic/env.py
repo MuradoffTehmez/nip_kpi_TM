@@ -10,6 +10,8 @@ from database import Base, KPI_DB_URL
 from models.user import User
 from models.user_profile import UserProfile
 from models.kpi import EvaluationPeriod, Question, Evaluation, Answer
+from models.notification import Notification
+from models.pdp import DevelopmentPlan, PlanItem
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

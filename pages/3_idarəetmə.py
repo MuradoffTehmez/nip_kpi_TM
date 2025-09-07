@@ -8,6 +8,7 @@ from sqlalchemy import select, update, func
 from database import get_db
 from models.user import User
 from models.user_profile import UserProfile
+from models.kpi import Question
 from utils.utils import download_guide_doc_file, logout, check_login, show_notifications
 from services.user_service import UserService
 
@@ -36,7 +37,7 @@ with tab1:
             with col1:
                 new_username = st.text_input("İstifadəçi Adı (login üçün)")
                 new_password = st.text_input("Şifrə", type="password")
-                new_role = st.selectbox("Rolu", ["user", "admin"])
+                new_role = st.selectbox("Rolu", ["user", "admin", "manager"])
             with col2:
                 new_full_name = st.text_input("Tam Adı (Ad, Soyad)")
                 new_position = st.text_input("Vəzifəsi")
@@ -69,47 +70,109 @@ with tab1:
 
     st.subheader("Mövcud İstifadəçilər")
     try:
-        with get_db() as session:
-            users_query = session.query(
-                User.id, User.username, UserProfile.full_name,
-                UserProfile.position, User.role, User.is_active, User.manager_id, UserProfile.department
-            ).join(UserProfile, User.id == UserProfile.user_id).order_by(User.id)
-            users_data = users_query.all()
-            if users_data:
-                # Get all users for manager selection
-                all_users = session.query(UserProfile).all()
-                user_name_map = {profile.user_id: profile.full_name for profile in all_users}
-                user_name_map[None] = "Rəhbər yoxdur"
+        # Bütün istifadəçiləri və onların profillərini əldə edirik
+        users_data = UserService.get_all_users_with_profiles()
+        
+        if users_data:
+            # Get all users for manager selection
+            all_users = UserService.get_all_active_users()
+            user_name_map = {user.id: user.get_full_name() for user in all_users}
+            user_name_map[None] = "Rəhbər yoxdur"
+            
+            # Format data for display
+            formatted_users_data = []
+            for user in users_data:
+                manager_name = user_name_map.get(user["manager_id"], "Naməlum")
+                formatted_users_data.append({
+                    "ID": user["id"],
+                    "İstifadəçi Adı": user["username"],
+                    "Tam Adı": user["full_name"],
+                    "Vəzifəsi": user["position"],
+                    "Rolu": user["role"],
+                    "Aktivdir": user["is_active"],
+                    "Rəhbəri": manager_name,
+                    "Şöbə": user["department"] if user["department"] else ""
+                })
+            
+            df_users = pd.DataFrame(formatted_users_data)
+            if 'original_users_df' not in st.session_state:
+                st.session_state['original_users_df'] = df_users.copy()
                 
-                # Format data for display
-                formatted_users_data = []
-                for user_row in users_data:
-                    user_id, username, full_name, position, role, is_active, manager_id, department = user_row
-                    manager_name = user_name_map.get(manager_id, "Naməlum")
-                    formatted_users_data.append((user_id, username, full_name, position, role, is_active, manager_name, department if department else ""))
-                
-                df_users = pd.DataFrame(formatted_users_data, columns=[
-                    "ID", "İstifadəçi Adı", "Tam Adı", "Vəzifəsi", "Rolu", "Aktivdir", "Rəhbəri", "Şöbə"
-                ])
-                if 'original_users_df' not in st.session_state:
-                    st.session_state['original_users_df'] = df_users.copy()
-                edited_df = st.data_editor(
-                    df_users, use_container_width=True, hide_index=True, key="user_editor",
-                    column_config={
-                        "ID": st.column_config.NumberColumn("ID", disabled=True),
-                        "Rolu": st.column_config.SelectboxColumn("Rolu", options=["user", "admin", "manager"]),
-                        "Aktivdir": st.column_config.CheckboxColumn("Aktivdir")
-                    }
-                )
-                if st.button("İstifadəçiləri Yadda Saxla"):
-                    # Bu hissəni daha düzgün şəkildə yazmaq lazımdır
-                    st.warning("İstifadəçiləri redaktə etmə funksionallığı hazırda tam işləmir.")
+            edited_df = st.data_editor(
+                df_users, use_container_width=True, hide_index=True, key="user_editor",
+                column_config={
+                    "ID": st.column_config.NumberColumn("ID", disabled=True),
+                    "Rolu": st.column_config.SelectboxColumn("Rolu", options=["user", "admin", "manager"]),
+                    "Aktivdir": st.column_config.CheckboxColumn("Aktivdir")
+                }
+            )
+            
+            if st.button("İstifadəçiləri Yadda Saxla"):
+                try:
+                    # Orijinal DataFrame-i əldə edirik
+                    original_df = st.session_state['original_users_df']
+                    
+                    # Dəyişdirilmiş sətirləri müqayisə edirik
+                    # ID-lərə görə birləşdiririk
+                    merged_df = pd.merge(original_df, edited_df, on='ID', suffixes=('_orig', '_new'))
+                    
+                    # Dəyişdirilmiş sütunları müqayisə edirik
+                    changed_rows = merged_df[
+                        (merged_df['İstifadəçi Adı_orig'] != merged_df['İstifadəçi Adı_new']) |
+                        (merged_df['Tam Adı_orig'] != merged_df['Tam Adı_new']) |
+                        (merged_df['Vəzifəsi_orig'] != merged_df['Vəzifəsi_new']) |
+                        (merged_df['Rolu_orig'] != merged_df['Rolu_new']) |
+                        (merged_df['Aktivdir_orig'] != merged_df['Aktivdir_new']) |
+                        (merged_df['Rəhbəri_orig'] != merged_df['Rəhbəri_new']) |
+                        (merged_df['Şöbə_orig'] != merged_df['Şöbə_new'])
+                    ]
+                    
+                    if not changed_rows.empty:
+                        updated_count = 0
+                        for index, row in changed_rows.iterrows():
+                            # İstifadəçi ID-sini əldə edirik
+                            user_id = row['ID']
+                            
+                            # Manager ID-ni tapırıq
+                            manager_name = row['Rəhbəri_new']
+                            manager_id = None
+                            for user in all_users:
+                                if user.get_full_name() == manager_name:
+                                    manager_id = user.id
+                                    break
+                            
+                            # Yeniləmə məlumatlarını yığırıq
+                            update_data = {
+                                "username": row['İstifadəçi Adı_new'],
+                                "role": row['Rolu_new'],
+                                "is_active": row['Aktivdir_new'],
+                                "manager_id": manager_id if manager_id else None,
+                                "full_name": row['Tam Adı_new'],
+                                "position": row['Vəzifəsi_new'],
+                                "department": row['Şöbə_new'] if row['Şöbə_new'] else None
+                            }
+                            
+                            # İstifadəçini yeniləyirik
+                            try:
+                                UserService.update_user_profile(user_id, update_data)
+                                updated_count += 1
+                            except Exception as e:
+                                st.error(f"İstifadəçi ID {user_id} yenilənərkən xəta baş verdi: {str(e)}")
+                        
+                        if updated_count > 0:
+                            st.success(f"{updated_count} istifadəçinin məlumatları uğurla yeniləndi!")
+                            # Session state-i yeniləyirik
+                            del st.session_state['original_users_df']
+                            st.rerun()
+                    else:
+                        st.warning("Heç bir dəyişiklik edilməyib.")
+                except Exception as e:
+                    st.error(f"İstifadəçiləri yeniləyərkən xəta baş verdi: {str(e)}")
     except Exception as e:
         st.error(f"İstifadəçilərlə işləyərkən xəta baş verdi: {e}")
 
 with tab2:
     try:
-        from models.kpi import Question
         with get_db() as session:
             total_weight_query = session.query(func.sum(Question.weight)).filter(Question.is_active == True)
             current_total_weight = total_weight_query.scalar() or 0.0
@@ -161,9 +224,49 @@ with tab2:
                     if abs(new_total_weight - 1.0) > 0.001:
                         st.error(f"Yadda saxlamaq mümkün deyil! Aktiv sualların yeni cəmi {new_total_weight:.2f} olur. Cəm 1.0 olmalıdır.")
                     else:
-                        original_questions_df = st.session_state.original_questions_df
-                        # Dəyişiklikləri yoxlamaq və yeniləmək üçün daha mürəkkəb məntiq lazımdır
-                        st.warning("Sualları redaktə etmə funksionallığı hazırda tam işləmir.")
+                        try:
+                            # Orijinal DataFrame-i əldə edirik
+                            original_questions_df = st.session_state.original_questions_df
+                            
+                            # Dəyişdirilmiş sətirləri müqayisə edirik
+                            # ID-lərə görə birləşdiririk
+                            merged_df = pd.merge(original_questions_df, edited_questions_df, on='ID', suffixes=('_orig', '_new'))
+                            
+                            # Dəyişdirilmiş sütunları müqayisə edirik
+                            changed_rows = merged_df[
+                                (merged_df['Sual_orig'] != merged_df['Sual_new']) |
+                                (merged_df['Kateqoriya_orig'] != merged_df['Kateqoriya_new']) |
+                                (merged_df['Çəkisi_orig'] != merged_df['Çəkisi_new']) |
+                                (merged_df['Aktivdir_orig'] != merged_df['Aktivdir_new'])
+                            ]
+                            
+                            if not changed_rows.empty:
+                                updated_count = 0
+                                for index, row in changed_rows.iterrows():
+                                    # Sual ID-sini əldə edirik
+                                    question_id = row['ID']
+                                    
+                                    # Sualı yeniləyirik
+                                    question = session.query(Question).filter(Question.id == question_id).first()
+                                    if question:
+                                        question.text = row['Sual_new']
+                                        question.category = row['Kateqoriya_new']
+                                        question.weight = row['Çəkisi_new']
+                                        question.is_active = row['Aktivdir_new']
+                                        session.commit()
+                                        updated_count += 1
+                                
+                                if updated_count > 0:
+                                    st.success(f"{updated_count} sualın məlumatları uğurla yeniləndi!")
+                                    # Session state-i yeniləyirik
+                                    del st.session_state['original_questions_df']
+                                    st.rerun()
+                                else:
+                                    st.warning("Heç bir dəyişiklik edilməyib.")
+                            else:
+                                st.warning("Heç bir dəyişiklik edilməyib.")
+                        except Exception as e:
+                            st.error(f"Sualları yeniləyərkən xəta baş verdi: {str(e)}")
                         
     except Exception as e:
         st.error(f"Suallarla işləyərkən xəta baş verdi: {e}")
