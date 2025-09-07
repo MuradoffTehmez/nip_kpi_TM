@@ -5,6 +5,7 @@ st.set_page_config(layout="wide")
 
 import pandas as pd
 import altair as alt
+from datetime import datetime
 from database import get_db
 from services.degree360_service import Degree360Service
 from services.user_service import UserService
@@ -12,9 +13,6 @@ from utils.utils import check_login, logout, show_notifications
 
 # Təhlükəsizlik yoxlaması
 current_user = check_login()
-if current_user.role != "admin":
-    st.error("Bu səhifəyə giriş üçün icazəniz yoxdur.")
-    st.stop()
 
 # Sidebar menyusu
 st.sidebar.page_link(page="pages/6_kpi_idarəetmə.py", label="KPI İdarəetmə", icon=":material/settings:")
@@ -29,6 +27,10 @@ st.title("360° Qiymətləndirmə Hesabatları")
 
 # Mövcud 360° sessiyalarını əldə edirik
 sessions = Degree360Service.get_all_active_360_sessions()
+
+# Admin olmayan istifadəçilər yalnız öz qiymətləndirmələrini görə bilər
+if current_user.role != "admin":
+    sessions = [s for s in sessions if s.evaluated_user_id == current_user.id or s.evaluator_user_id == current_user.id]
 
 if not sessions:
     st.info("Hələ heç bir 360° qiymətləndirmə sessiyası yaradılmayıb.")
@@ -45,23 +47,77 @@ else:
             # Sessiyanın nəticələrini hesablayırıq
             results = Degree360Service.calculate_360_session_results(selected_session_id)
             
+            # Əlavə hesabat məlumatlarını əldə edirik
+            report_data = Degree360Service.generate_360_report(selected_session_id)
+            
             if not results:
                 st.info("Bu sessiya üçün hələ nəticə yoxdur.")
             else:
                 st.header(f"{results['evaluated_user']} - 360° Qiymətləndirmə Nəticələri")
                 
-                # Ümumi bal
-                col1, col2 = st.columns(2)
+                # Ümumi bal və təfərrüatlar
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric(label="Ümumi Bal", value=results['overall_score'])
                 with col2:
                     st.metric(label="Qiymətləndirilən İşçi", value=results['evaluated_user'])
+                with col3:
+                    st.metric(label="Hesabat Tarixi", value=datetime.now().strftime("%d.%m.%Y"))
+                
+                st.divider()
+                
+                # Güclü və zəif tərəflər
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("💪 Güclü Tərəflər")
+                    strengths = report_data.get("strengths", [])
+                    if strengths:
+                        for strength in strengths:
+                            st.markdown(f"- **{strength['question']}** ({strength['category']})")
+                            st.caption(f"Bal: {strength['score']}/5.0")
+                    else:
+                        st.info("Güclü tərəf aşkar edilməyib.")
+                
+                with col2:
+                    st.subheader("⚠️ Zəif Tərəflər")
+                    weaknesses = report_data.get("weaknesses", [])
+                    if weaknesses:
+                        for weakness in weaknesses:
+                            st.markdown(f"- **{weakness['question']}** ({weakness['category']})")
+                            st.caption(f"Bal: {weakness['score']}/5.0")
+                    else:
+                        st.info("Zəif tərəf aşkar edilməyib.")
+                
+                st.divider()
+                
+                # Gap analizi (öz və başqalarının qiyməti arasındakı fərq)
+                st.subheader("🔍 Gap Analizi (Qiymətləndirmə Fərqləri)")
+                gap_analysis = report_data.get("gap_analysis", [])
+                if gap_analysis:
+                    gap_data = []
+                    for gap in gap_analysis:
+                        interpretation = gap["interpretation"]
+                        color = "🔴" if "aşağı" in interpretation else "🟢" if "yüksək" in interpretation else "🟡"
+                        gap_data.append({
+                            "Sual": gap["question"],
+                            "Kateqoriya": gap["category"],
+                            "Öz Qiyməti": gap["self_score"],
+                            "Digərlərinin Ortası": gap["others_avg_score"],
+                            "Fərq": gap["gap"],
+                            "Təfsir": f"{color} {interpretation}"
+                        })
+                    
+                    df_gap = pd.DataFrame(gap_data)
+                    st.dataframe(df_gap, use_container_width=True)
+                else:
+                    st.info("Gap analizi üçün kifayət qədər məlumat yoxdur.")
                 
                 st.divider()
                 
                 # Rol üzrə ballar
                 if results['scores_by_role']:
-                    st.subheader("Rol Üzrə Ballar")
+                    st.subheader("👥 Rol Üzrə Ballar")
                     role_data = []
                     for role, score in results['scores_by_role'].items():
                         role_data.append({"Rol": role, "Bal": score})
@@ -85,7 +141,7 @@ else:
                 
                 # Ətraflı nəticələr
                 if results['detailed_results']:
-                    st.subheader("Ətraflı Nəticələr (Sual Üzrə)")
+                    st.subheader("📊 Ətraflı Nəticələr (Sual Üzrə)")
                     df_detailed = pd.DataFrame(results['detailed_results'])
                     
                     # Kateqoriya üzrə qruplaşdırma
@@ -112,7 +168,7 @@ else:
                     
                     # Bütün sualların ümumi cədvəli
                     st.divider()
-                    st.subheader("Bütün Suallar Üzrə Nəticələr")
+                    st.subheader("📋 Bütün Suallar Üzrə Nəticələr")
                     st.dataframe(df_detailed[['question', 'category', 'weight', 'average_score']], use_container_width=True)
                     
                     # Bar chart - sual üzrə orta ballar
@@ -129,35 +185,48 @@ else:
                 
                 # Hesabatı yükləmək imkanı
                 st.divider()
-                st.subheader("Hesabatı Yüklə")
+                st.subheader("📥 Hesabatı Yüklə")
                 
-                if st.button("Excel Formatında Yüklə"):
-                    # DataFrame-ləri yarat
-                    df_summary = pd.DataFrame([{
-                        "Qiymətləndirilən işçi": results['evaluated_user'],
-                        "Ümumi bal": results['overall_score']
-                    }])
-                    
-                    df_roles = pd.DataFrame([
-                        {"Rol": role, "Bal": score} 
-                        for role, score in results['scores_by_role'].items()
-                    ])
-                    
-                    df_questions = pd.DataFrame(results['detailed_results'])
-                    
-                    # Excel faylı yarat
-                    import io
-                    buffer = io.BytesIO()
-                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                        df_summary.to_excel(writer, sheet_name='Ümumi Nəticə', index=False)
-                        df_roles.to_excel(writer, sheet_name='Rol Üzrə Ballar', index=False)
-                        df_questions.to_excel(writer, sheet_name='Sual Üzrə Nəticələr', index=False)
-                    
-                    st.download_button(
-                        label="📥 Excel Hesabatını Yüklə",
-                        data=buffer.getvalue(),
-                        file_name=f"360_qiymetlendirme_hesabati_{results['evaluated_user'].replace(' ', '_')}.xlsx",
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    )
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("Excel Formatında Yüklə"):
+                        # DataFrame-ləri yarat
+                        df_summary = pd.DataFrame([{
+                            "Qiymətləndirilən işçi": results['evaluated_user'],
+                            "Ümumi bal": results['overall_score'],
+                            "Hesabat tarixi": datetime.now().strftime("%d.%m.%Y %H:%M")
+                        }])
+                        
+                        df_roles = pd.DataFrame([
+                            {"Rol": role, "Bal": score} 
+                            for role, score in results['scores_by_role'].items()
+                        ])
+                        
+                        df_questions = pd.DataFrame(results['detailed_results'])
+                        
+                        # Gap analizi üçün DataFrame
+                        df_gap = pd.DataFrame(gap_analysis)
+                        
+                        # Excel faylı yarat
+                        import io
+                        buffer = io.BytesIO()
+                        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                            df_summary.to_excel(writer, sheet_name='Ümumi Nəticə', index=False)
+                            df_roles.to_excel(writer, sheet_name='Rol Üzrə Ballar', index=False)
+                            df_questions.to_excel(writer, sheet_name='Sual Üzrə Nəticələr', index=False)
+                            if not df_gap.empty:
+                                df_gap.to_excel(writer, sheet_name='Gap Analizi', index=False)
+                        
+                        st.download_button(
+                            label="📥 Excel Hesabatını Yüklə",
+                            data=buffer.getvalue(),
+                            file_name=f"360_qiymetlendirme_hesabati_{results['evaluated_user'].replace(' ', '_')}.xlsx",
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        )
+                
+                with col2:
+                    if st.button("PDF Formatında Yüklə"):
+                        st.info("PDF formatı hazırda dəstəklənmir. Zəhmət olmasa Excel formatından istifadə edin.")
         except Exception as e:
             st.error(f"Hesabat əldə edərkən xəta baş verdi: {str(e)}")

@@ -76,9 +76,10 @@ class Answer(Base):
     
     score = Column(Integer, nullable=False)
     comment = Column(Text)
+    author_role = Column(String(20), nullable=False, default='employee')  # 'employee' or 'manager'
     
     evaluation = relationship("Evaluation", back_populates="answers")
     question = relationship("Question")
 
     def __repr__(self):
-        return f"<Answer(score={self.score})>"
+        return f"<Answer(score={self.score}, author_role='{self.author_role}')>"

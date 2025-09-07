@@ -9,7 +9,8 @@ from models.degree360 import (
     Degree360ParticipantRole
 )
 from models.user import User
-from datetime import date
+from services.notification_service import NotificationService
+from datetime import date, datetime
 from typing import List, Dict, Any
 
 class Degree360Service:
@@ -19,7 +20,8 @@ class Degree360Service:
         evaluated_user_id: int,
         evaluator_user_id: int,
         start_date: date,
-        end_date: date
+        end_date: date,
+        is_anonymous: bool = True
     ) -> Degree360Session:
         """
         Yeni 360 dərəcə qiymətləndirmə sessiyası yaradır.
@@ -30,6 +32,7 @@ class Degree360Service:
             evaluator_user_id (int): Sessiyanı yaradan rəhbərin ID-si
             start_date (date): Başlama tarixi
             end_date (date): Bitmə tarixi
+            is_anonymous (bool): Anonimlik parametri
             
         Returns:
             Degree360Session: Yaradılmış sessiya obyekti
@@ -41,11 +44,21 @@ class Degree360Service:
                 evaluator_user_id=evaluator_user_id,
                 start_date=start_date,
                 end_date=end_date,
+                is_anonymous=is_anonymous,
                 status="ACTIVE"
             )
             session.add(new_session)
             session.commit()
             session.refresh(new_session)
+            
+            # Qiymətləndiriləcək işçiyə bildiriş göndər
+            evaluated_user = session.query(User).filter(User.id == evaluated_user_id).first()
+            if evaluated_user:
+                NotificationService.create_notification(
+                    user_id=evaluated_user_id,
+                    message=f"Yeni 360° qiymətləndirmə sessiyası yaradıldı: {name}"
+                )
+            
             return new_session
 
     @staticmethod
@@ -213,6 +226,26 @@ class Degree360Service:
             ).first()
             if participant:
                 participant.status = "COMPLETED"
+                
+                # Qiymətləndirmə sessiyasını əldə et
+                degree360_session = session.query(Degree360Session).filter(
+                    Degree360Session.id == participant.session_id
+                ).first()
+                
+                # Qiymətləndiriləcək işçiyə bildiriş göndər
+                if degree360_session:
+                    evaluated_user = session.query(User).filter(
+                        User.id == degree360_session.evaluated_user_id
+                    ).first()
+                    evaluator_user = session.query(User).filter(
+                        User.id == participant.evaluator_user_id
+                    ).first()
+                    
+                    if evaluated_user and evaluator_user:
+                        NotificationService.create_notification(
+                            user_id=degree360_session.evaluated_user_id,
+                            message=f"{evaluator_user.get_full_name()} 360° qiymətləndirmə sessiyasında rəy bildirdi: {degree360_session.name}"
+                        )
             
             session.commit()
 
@@ -382,6 +415,81 @@ class Degree360Service:
             }
 
     @staticmethod
+    def get_pending_360_evaluations_for_user(user_id: int) -> List[Dict[str, Any]]:
+        """
+        İstifadəçinin tamamlanmamış 360 dərəcə qiymətləndirmələrini qaytarır.
+        
+        Args:
+            user_id (int): İstifadəçinin ID-si
+            
+        Returns:
+            List[Dict[str, Any]]: Tamamlanmamış qiymətləndirmələr siyahısı
+        """
+        pending_evaluations = []
+        
+        with get_db() as session:
+            # İstifadəçinin iştirakçı olduğu, lakin hələ tamamlamadığı sessiyaları əldə edirik
+            participants = session.query(Degree360Participant).filter(
+                Degree360Participant.evaluator_user_id == user_id,
+                Degree360Participant.status == "PENDING"
+            ).all()
+            
+            for participant in participants:
+                degree360_session = session.query(Degree360Session).filter(
+                    Degree360Session.id == participant.session_id
+                ).first()
+                
+                if degree360_session and degree360_session.status == "ACTIVE":
+                    evaluated_user = session.query(User).filter(
+                        User.id == degree360_session.evaluated_user_id
+                    ).first()
+                    
+                    pending_evaluations.append({
+                        "session_id": degree360_session.id,
+                        "session_name": degree360_session.name,
+                        "evaluated_user": evaluated_user.get_full_name() if evaluated_user else "Naməlum",
+                        "role": participant.role.value,
+                        "end_date": degree360_session.end_date.strftime("%d.%m.%Y")
+                    })
+            
+            return pending_evaluations
+            
+    @staticmethod
+    def send_360_reminders() -> None:
+        """
+        360 dərəcə qiymətləndirmələr üçün xatırlatma bildirişləri göndərir.
+        Bitmə tarixinə 3 gün qalmış iştirakçılara xatırlatma göndərilir.
+        """
+        from datetime import timedelta
+        
+        with get_db() as session:
+            # Bitmə tarixinə 3 gün qalmış aktiv sessiyaları tap
+            reminder_date = date.today() + timedelta(days=3)
+            
+            sessions = session.query(Degree360Session).filter(
+                Degree360Session.status == "ACTIVE",
+                Degree360Session.end_date == reminder_date
+            ).all()
+            
+            for degree360_session in sessions:
+                # Hələ tamamlamamış iştirakçıları tap
+                participants = session.query(Degree360Participant).filter(
+                    Degree360Participant.session_id == degree360_session.id,
+                    Degree360Participant.status == "PENDING"
+                ).all()
+                
+                for participant in participants:
+                    evaluator_user = session.query(User).filter(
+                        User.id == participant.evaluator_user_id
+                    ).first()
+                    
+                    if evaluator_user:
+                        NotificationService.create_notification(
+                            user_id=participant.evaluator_user_id,
+                            message=f"Xatırlatma: {degree360_session.name} 360° qiymətləndirmə sessiyasının bitməsinə 3 gün qalıb. Zəhmət olmasa, rəyinizi bildirin."
+                        )
+                        
+    @staticmethod
     def get_all_active_360_sessions() -> List[Degree360Session]:
         """
         Bütün aktiv 360 dərəcə qiymətləndirmə sessiyalarını qaytarır.
@@ -393,3 +501,91 @@ class Degree360Service:
             return session.query(Degree360Session).filter(
                 Degree360Session.status == "ACTIVE"
             ).all()
+            
+    @staticmethod
+    def generate_360_report(session_id: int) -> Dict[str, Any]:
+        """
+        360 dərəcə qiymətləndirmə üçün PDF hesabat generasiya edir.
+        
+        Args:
+            session_id (int): Sessiyanın ID-si
+            
+        Returns:
+            Dict[str, Any]: Hesabat məlumatları və statistikalar
+        """
+        # Əsas nəticələri əldə edirik
+        results = Degree360Service.calculate_360_session_results(session_id)
+        
+        if not results:
+            return {}
+            
+        with get_db() as session:
+            # Sessiyanı əldə et
+            degree360_session = session.query(Degree360Session).filter(
+                Degree360Session.id == session_id
+            ).first()
+            
+            if not degree360_session:
+                return {}
+                
+            # Güclü və zəif tərəfləri müəyyən etmək üçün analiz
+            strengths = []
+            weaknesses = []
+            
+            for result in results.get("detailed_results", []):
+                avg_score = result.get("average_score", 0)
+                # 4.0 və yuxarı bal güclü tərəf kimi qəbul edilir
+                if avg_score >= 4.0:
+                    strengths.append({
+                        "question": result["question"],
+                        "category": result["category"],
+                        "score": avg_score
+                    })
+                # 2.5 və aşağı bal zəif tərəf kimi qəbul edilir
+                elif avg_score <= 2.5:
+                    weaknesses.append({
+                        "question": result["question"],
+                        "category": result["category"],
+                        "score": avg_score
+                    })
+            
+            # Öz və başqalarının qiyməti arasındakı fərq analizi (gap analysis)
+            gap_analysis = []
+            detailed_results = results.get("detailed_results", [])
+            
+            for result in detailed_results:
+                scores_by_role = result.get("scores_by_role", {})
+                if scores_by_role:
+                    # Öz qiymətləndirməsi və digər rolların qiymətləndirmələri arasında fərq
+                    self_score = scores_by_role.get("Özünü qiymətləndirən", 0)
+                    other_scores = [score for role, score in scores_by_role.items() if role != "Özünü qiymətləndirən"]
+                    
+                    if other_scores and self_score > 0:
+                        avg_other_score = sum(other_scores) / len(other_scores)
+                        gap = avg_other_score - self_score
+                        
+                        gap_analysis.append({
+                            "question": result["question"],
+                            "category": result["category"],
+                            "self_score": self_score,
+                            "others_avg_score": round(avg_other_score, 2),
+                            "gap": round(gap, 2),
+                            "interpretation": "Özünü qiymətləndirməsi aşağıdır" if gap > 0.5 else 
+                                            "Özünü qiymətləndirməsi yüksəkdir" if gap < -0.5 else 
+                                            "Uyğundur"
+                        })
+            
+            # Hesabat məlumatlarını hazırlayırıq
+            report_data = {
+                "session_name": degree360_session.name,
+                "evaluated_user": results.get("evaluated_user", "Naməlum"),
+                "generated_date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                "overall_score": results.get("overall_score", 0),
+                "scores_by_role": results.get("scores_by_role", {}),
+                "strengths": strengths,
+                "weaknesses": weaknesses,
+                "gap_analysis": gap_analysis,
+                "detailed_results": detailed_results
+            }
+            
+            return report_data

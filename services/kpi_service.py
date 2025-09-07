@@ -317,3 +317,66 @@ class KpiService:
                     performance_comparison[period.name] = period_data
                     
         return performance_comparison
+
+    @staticmethod
+    def submit_evaluation(evaluation_id: int, user_id: int, answers: dict):
+        """
+        Qiymətləndirməni təsdiqləyir və statusu yeniləyir.
+        
+        Args:
+            evaluation_id (int): Qiymətləndirmənin ID-si
+            user_id (int): İstifadəçinin ID-si
+            answers (dict): Cavablar sözlüğü (sual_id: {"score": int, "comment": str})
+        """
+        with get_db() as session:
+            # Qiymətləndirməni əldə edirik
+            evaluation = session.query(Evaluation).filter(Evaluation.id == evaluation_id).first()
+            if not evaluation:
+                raise ValueError("Qiymətləndirmə tapılmadı")
+            
+            # İstifadəçinin qiymətləndirməyə icazəsi olub-olmadığını yoxlayırıq
+            if evaluation.evaluator_user_id != user_id:
+                raise PermissionError("Bu qiymətləndirməyə icazəniz yoxdur")
+            
+            # İstifadəçinin rolu (əməkdaş və ya rəhbər)
+            is_employee = evaluation.evaluated_user_id == user_id
+            is_manager = evaluation.evaluator_user_id == user_id and evaluation.evaluated_user_id != user_id
+            
+            # Mövcud cavabları silirik
+            session.query(Answer).filter(Answer.evaluation_id == evaluation_id).delete()
+            
+            # Yeni cavabları əlavə edirik
+            for question_id, answer_data in answers.items():
+                author_role = 'employee' if is_employee else 'manager'
+                new_answer = Answer(
+                    evaluation_id=evaluation_id,
+                    question_id=question_id,
+                    score=answer_data['score'],
+                    comment=answer_data.get('comment'),
+                    author_role=author_role
+                )
+                session.add(new_answer)
+            
+            # Statusu yeniləyirik
+            if is_employee:
+                # Əgər işçi özünü qiymətləndirirsə
+                evaluation.status = EvaluationStatus.SELF_EVAL_COMPLETED
+                # Rəhbərə bildiriş göndəririk
+                manager = UserService.get_user_by_id(evaluation.evaluator_user_id)
+                if manager and manager.id != evaluation.evaluated_user_id:
+                    NotificationService.create_notification(
+                        user_id=manager.id,
+                        message=f"{evaluation.evaluated_user.get_full_name()} özünü qiymətləndirdi. Zəhmət olmasa, nəzərdən keçirin."
+                    )
+            elif is_manager:
+                # Əgər rəhbər qiymətləndirirsə
+                evaluation.status = EvaluationStatus.FINALIZED
+                # İşçiyə bildiriş göndəririk
+                employee = UserService.get_user_by_id(evaluation.evaluated_user_id)
+                if employee:
+                    NotificationService.create_notification(
+                        user_id=employee.id,
+                        message=f"{evaluation.period.name} qiymətləndirməniz yekunlaşdırıldı."
+                    )
+            
+            session.commit()

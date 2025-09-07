@@ -1,5 +1,6 @@
 # models/degree360.py
 
+import enum
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, Date, Enum, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -23,6 +24,7 @@ class Degree360Session(Base):
     evaluator_user_id = Column(Integer, ForeignKey('user.id'), nullable=False)  # Sessiyanı yaradan rəhbər
     start_date = Column(Date, nullable=False)  # Başlama tarixi
     end_date = Column(Date, nullable=False)  # Bitmə tarixi
+    is_anonymous = Column(Boolean, default=True)  # Anonimlik parametri
     status = Column(String, default="ACTIVE")  # ACTIVE, COMPLETED, CANCELLED
     created_at = Column(DateTime, default=datetime.utcnow)
     

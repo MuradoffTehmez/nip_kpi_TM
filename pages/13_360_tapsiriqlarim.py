@@ -4,6 +4,7 @@ import streamlit as st
 st.set_page_config(layout="wide")
 
 import pandas as pd
+from datetime import date
 from database import get_db
 from services.degree360_service import Degree360Service
 from services.user_service import UserService
@@ -53,6 +54,25 @@ else:
     # Gözləyən tapşırıqlar
     if pending_sessions:
         st.header("Gözləyən Tapşırıqlar")
+        
+        # Vaxtı yaxınlaşan tapşırıqlar üçün xəbərdarlıq
+        upcoming_deadlines = []
+        for session_info in pending_sessions:
+            session = session_info["session"]
+            days_until_deadline = (session.end_date - date.today()).days
+            if days_until_deadline <= 3:
+                upcoming_deadlines.append({
+                    "session_name": session.name,
+                    "evaluated_user": session_info["evaluated_user"],
+                    "days_left": days_until_deadline
+                })
+        
+        if upcoming_deadlines:
+            st.warning("⚠️ Aşağıdakı tapşırıqların bitməsinə az bir zaman qalıb:")
+            for deadline in upcoming_deadlines:
+                st.write(f"- **{deadline['session_name']}** ({deadline['evaluated_user']}) - {deadline['days_left']} gün qalıb")
+            st.divider()
+        
         for session_info in pending_sessions:
             session = session_info["session"]
             participation = session_info["participation"]
@@ -63,12 +83,27 @@ else:
                 st.write(f"**Başlama tarixi:** {session.start_date.strftime('%d.%m.%Y')}")
                 st.write(f"**Bitmə tarixi:** {session.end_date.strftime('%d.%m.%Y')}")
                 
+                # Vaxt qalığı göstər
+                days_until_deadline = (session.end_date - date.today()).days
+                if days_until_deadline <= 3:
+                    st.error(f"⚠️ Bitməyə {days_until_deadline} gün qalıb!")
+                elif days_until_deadline <= 7:
+                    st.warning(f"⚠️ Bitməyə {days_until_deadline} gün qalıb")
+                
                 # Sessiyanın suallarını əldə edirik
                 questions = Degree360Service.get_questions_for_360_session(session.id)
                 
                 if not questions:
                     st.info("Bu sessiya üçün hələ sual əlavə edilməyib.")
                 else:
+                    # Sual kateqoriyalarına görə qruplaşdır
+                    categories = {}
+                    for question in questions:
+                        category = question.category
+                        if category not in categories:
+                            categories[category] = []
+                        categories[category].append(question)
+                    
                     # Cavabları əldə edirik (əgər varsa)
                     existing_answers = Degree360Service.get_answers_for_360_participant(participation.id)
                     answer_dict = {a.question_id: a for a in existing_answers}
@@ -77,32 +112,37 @@ else:
                     with st.form(f"answer_form_{participation.id}"):
                         answers_data = {}
                         
-                        for question in questions:
-                            st.subheader(question.text)
-                            st.caption(f"Kateqoriya: {question.category} | Çəki: {question.weight}")
+                        # Kateqoriya üzrə sualları göstər
+                        for category, category_questions in categories.items():
+                            st.subheader(f"Kateqoriya: {category}")
+                            st.markdown("---")
                             
-                            # Əgər cavab artıq verilibsə, onu göstər
-                            existing_answer = answer_dict.get(question.id)
-                            score = st.slider(
-                                "Bal", 
-                                1, 5, 
-                                value=existing_answer.score if existing_answer else 3, 
-                                key=f"score_{question.id}_{participation.id}",
-                                help="1 - Çox zəif, 5 - Əla"
-                            )
-                            comment = st.text_area(
-                                "Şərh (vacib deyil)", 
-                                value=existing_answer.comment if existing_answer else "",
-                                key=f"comment_{question.id}_{participation.id}",
-                                placeholder="Fikirlərinizi əlavə edin..."
-                            )
-                            
-                            answers_data[question.id] = {"score": score, "comment": comment}
-                            
-                            if question != questions[-1]:
-                                st.markdown("---")
+                            for question in category_questions:
+                                st.markdown(f"**{question.text}**")
+                                st.caption(f"Çəki: {question.weight}")
+                                
+                                # Əgər cavab artıq verilibsə, onu göstər
+                                existing_answer = answer_dict.get(question.id)
+                                score = st.slider(
+                                    "Bal", 
+                                    1, 5, 
+                                    value=existing_answer.score if existing_answer else 3, 
+                                    key=f"score_{question.id}_{participation.id}",
+                                    help="1 - Çox zəif, 5 - Əla"
+                                )
+                                comment = st.text_area(
+                                    "Şərh (vacib deyil)", 
+                                    value=existing_answer.comment if existing_answer else "",
+                                    key=f"comment_{question.id}_{participation.id}",
+                                    placeholder="Fikirlərinizi əlavə edin..."
+                                )
+                                
+                                answers_data[question.id] = {"score": score, "comment": comment}
+                                
+                                if question != category_questions[-1] or category != list(categories.keys())[-1]:
+                                    st.markdown("---")
                         
-                        submitted = st.form_submit_button("Cavabları Yadda Saxla", use_container_width=True)
+                        submitted = st.form_submit_button("Cavabları Yadda Saxla", use_container_width=True, type="primary")
                         if submitted:
                             try:
                                 # Cavabları formatla
@@ -149,5 +189,10 @@ else:
         
         df_completed = pd.DataFrame(completed_data)
         st.dataframe(df_completed, use_container_width=True)
+        
+        # Hesabat səhifəsinə keçid
+        st.info("Tamamlanmış 360° qiymətləndirmələrin ətraflı hesabatlarını görmək üçün aşağıdakı düyməyə klikləyin:")
+        if st.button("360° Hesabatlar", type="primary"):
+            st.switch_page("pages/14_360_hesabatlar.py")
     else:
         st.info("Hələ heç bir 360° qiymətləndirmə tapşırığını tamamlamısınız.")

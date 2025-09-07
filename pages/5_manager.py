@@ -249,18 +249,69 @@ else:
                         st.info("Seçilmiş işçi üçün hələ performans trend məlumatı yoxdur.")
     
     with tab2:
-        st.subheader("Təsdiq Gözləyən Qiymətləndirmələr")
+        st.subheader("Qiymətləndirmələr")
         
-        # SELF_EVAL_COMPLETED statuslu qiymətləndirmələri əldə edirik
+        # Bütün qiymətləndirmələri statuslarına görə qruplaşdıraraq göstər
         with get_db() as session:
-            pending_evaluations = KpiService.get_self_eval_completed_evaluations_for_manager(current_user.id)
+            # SELF_EVAL_COMPLETED statuslu qiymətləndirmələr (rəhbər rəyi gözləyən)
+            self_eval_completed_evaluations = KpiService.get_self_eval_completed_evaluations_for_manager(current_user.id)
             
-            if not pending_evaluations:
-                st.info("Hal-hazırda təsdiq gözləyən qiymətləndirmə yoxdur.")
-            else:
-                # Qiymətləndirmə detalları
-                eval_details = []
+            # PENDING statuslu qiymətləndirmələr (gözləyən)
+            pending_evaluations = session.query(Evaluation).filter(
+                Evaluation.evaluator_user_id == current_user.id,
+                Evaluation.status == EvaluationStatus.PENDING
+            ).all()
+            
+            # FINALIZED statuslu qiymətləndirmələr (yekunlaşmış)
+            finalized_evaluations = session.query(Evaluation).filter(
+                Evaluation.evaluator_user_id == current_user.id,
+                Evaluation.status == EvaluationStatus.FINALIZED
+            ).all()
+            
+            # Gözləyən qiymətləndirmələr
+            if pending_evaluations:
+                st.markdown("### Gözləyən Qiymətləndirmələr")
+                pending_eval_details = []
                 for e in pending_evaluations:
+                    evaluated_user = UserService.get_user_by_id(e.evaluated_user_id)
+                    evaluator = UserService.get_user_by_id(e.evaluator_user_id)
+                    status = e.status.value
+                    
+                    pending_eval_details.append({
+                        "ID": e.id,
+                        "Qiymətləndirilən": evaluated_user.get_full_name() if evaluated_user else "Naməlum",
+                        "Dövr": e.period.name,
+                        "Status": status
+                    })
+                
+                df_pending_eval_details = pd.DataFrame(pending_eval_details)
+                st.dataframe(df_pending_eval_details, use_container_width=True)
+                
+                # Seçilmiş qiymətləndirmələri qiymətləndirmək
+                selected_pending_evals = st.multiselect(
+                    "Qiymətləndirmək üçün qiymətləndirmələri seçin:",
+                    options=[f"{e['ID']} - {e['Qiymətləndirilən']} ({e['Dövr']})" for e in pending_eval_details],
+                    default=[f"{e['ID']} - {e['Qiymətləndirilən']} ({e['Dövr']})" for e in pending_eval_details],
+                    key="pending_evals"
+                )
+                
+                if st.button("Seçilmiş Qiymətləndirmələri Qiymətləndir"):
+                    if selected_pending_evals:
+                        for eval_option in selected_pending_evals:
+                            eval_id = int(eval_option.split(" - ")[0])
+                            evaluation = session.query(Evaluation).filter(Evaluation.id == eval_id).first()
+                            if evaluation and evaluation.status == EvaluationStatus.PENDING:
+                                # Qiymətləndirmə formuna yönləndir
+                                st.switch_page(f"pages/5_qiymetlendirme_formu.py?evaluation_id={eval_id}")
+                                break  # Bir dəfəyə bir qiymətləndirməyə yönləndir
+            else:
+                st.info("Hal-hazırda gözləyən qiymətləndirmə yoxdur.")
+            
+            # Rəhbər rəyi gözləyən qiymətləndirmələr
+            if self_eval_completed_evaluations:
+                st.markdown("### Rəhbər Rəyi Gözləyən Qiymətləndirmələr")
+                eval_details = []
+                for e in self_eval_completed_evaluations:
                     evaluated_user = UserService.get_user_by_id(e.evaluated_user_id)
                     evaluator = UserService.get_user_by_id(e.evaluator_user_id)
                     score = KpiService.calculate_evaluation_score(e.id)
@@ -279,7 +330,6 @@ else:
                 st.dataframe(df_eval_details, use_container_width=True)
                 
                 # Seçilmiş qiymətləndirmələri təsdiqləmək
-                st.subheader("Təsdiqləmək")
                 selected_evals_to_review = st.multiselect(
                     "Təsdiqləmək üçün qiymətləndirmələri seçin:",
                     options=[f"{e['ID']} - {e['Qiymətləndirilən']} ({e['Dövr']})" for e in eval_details],
@@ -288,18 +338,53 @@ else:
                 
                 if st.button("Seçilmiş Qiymətləndirmələri Təsdiqlə"):
                     if selected_evals_to_review:
-                        reviewed_count = 0
                         for eval_option in selected_evals_to_review:
                             eval_id = int(eval_option.split(" - ")[0])
                             evaluation = session.query(Evaluation).filter(Evaluation.id == eval_id).first()
                             if evaluation and evaluation.status == EvaluationStatus.SELF_EVAL_COMPLETED:
                                 # Qiymətləndirmə formuna yönləndir
                                 st.switch_page(f"pages/5_qiymetlendirme_formu.py?evaluation_id={eval_id}")
-                                reviewed_count += 1
-                        
-                        if reviewed_count > 0:
-                            st.success(f"{reviewed_count} qiymətləndirmə təsdiqlənmək üçün açıldı!")
-                        else:
-                            st.warning("Təsdiqləmək üçün qiymətləndirmə seçilməyib.")
-                    else:
-                        st.warning("Təsdiqləmək üçün qiymətləndirmə seçilməyib.")
+                                break  # Bir dəfəyə bir qiymətləndirməyə yönləndir
+            else:
+                st.info("Hal-hazırda rəhbər rəyi gözləyən qiymətləndirmə yoxdur.")
+            
+            # Yekunlaşmış qiymətləndirmələr
+            if finalized_evaluations:
+                st.markdown("### Yekunlaşmış Qiymətləndirmələr")
+                finalized_eval_details = []
+                for e in finalized_evaluations:
+                    evaluated_user = UserService.get_user_by_id(e.evaluated_user_id)
+                    evaluator = UserService.get_user_by_id(e.evaluator_user_id)
+                    score = KpiService.calculate_evaluation_score(e.id)
+                    status = e.status.value
+                    
+                    finalized_eval_details.append({
+                        "ID": e.id,
+                        "Qiymətləndirilən": evaluated_user.get_full_name() if evaluated_user else "Naməlum",
+                        "Dövr": e.period.name,
+                        "Status": status,
+                        "Yekun Bal": round(score, 2)
+                    })
+                
+                df_finalized_eval_details = pd.DataFrame(finalized_eval_details)
+                st.dataframe(df_finalized_eval_details, use_container_width=True)
+                
+                # Seçilmiş qiymətləndirmələri baxmaq
+                selected_finalized_evals = st.multiselect(
+                    "Baxmaq üçün qiymətləndirmələri seçin:",
+                    options=[f"{e['ID']} - {e['Qiymətləndirilən']} ({e['Dövr']})" for e in finalized_eval_details],
+                    default=[],
+                    key="finalized_evals"
+                )
+                
+                if st.button("Seçilmiş Qiymətləndirmələri Bax"):
+                    if selected_finalized_evals:
+                        for eval_option in selected_finalized_evals:
+                            eval_id = int(eval_option.split(" - ")[0])
+                            evaluation = session.query(Evaluation).filter(Evaluation.id == eval_id).first()
+                            if evaluation and evaluation.status == EvaluationStatus.FINALIZED:
+                                # Qiymətləndirmə formuna yönləndir
+                                st.switch_page(f"pages/5_qiymetlendirme_formu.py?evaluation_id={eval_id}")
+                                break  # Bir dəfəyə bir qiymətləndirməyə yönləndir
+            else:
+                st.info("Hal-hazırda yekunlaşmış qiymətləndirmə yoxdur.")

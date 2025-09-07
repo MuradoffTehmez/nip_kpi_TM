@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import text
 
 
 # revision identifiers, used by Alembic.
@@ -20,40 +21,54 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # development_plans cədvəlini yaradırıq (əgər yoxdursa)
-    op.create_table('development_plans',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('evaluation_id', sa.Integer(), nullable=False),
-    sa.Column('manager_id', sa.Integer(), nullable=True),
-    sa.Column('status', sa.String(), nullable=True),
-    sa.ForeignKeyConstraint(['evaluation_id'], ['evaluations.id'], ),
-    sa.ForeignKeyConstraint(['manager_id'], ['user.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_development_plans_id'), 'development_plans', ['id'], unique=False)
+    # Check if development_plans table exists
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
     
-    # plan_items cədvəlini yaradırıq
-    op.create_table('plan_items',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('plan_id', sa.Integer(), nullable=False),
-    sa.Column('goal', sa.String(), nullable=False),
-    sa.Column('actions_to_take', sa.String(), nullable=False),
-    sa.Column('deadline', sa.Date(), nullable=False),
-    sa.Column('is_completed', sa.Boolean(), server_default=sa.text('false'), nullable=True),
-    sa.ForeignKeyConstraint(['plan_id'], ['development_plans.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_plan_items_id'), 'plan_items', ['id'], unique=False)
+    # development_plans cədvəlini yaradırıq (əgər yoxdursa)
+    if 'development_plans' not in tables:
+        op.create_table('development_plans',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('evaluation_id', sa.Integer(), nullable=False),
+        sa.Column('manager_id', sa.Integer(), nullable=True),
+        sa.Column('status', sa.String(), nullable=True),
+        sa.ForeignKeyConstraint(['evaluation_id'], ['evaluations.id'], ),
+        sa.ForeignKeyConstraint(['manager_id'], ['user.id'], ),
+        sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+        sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_development_plans_id'), 'development_plans', ['id'], unique=False)
+    
+    # plan_items cədvəlini yaradırıq (əgər yoxdursa)
+    if 'plan_items' not in tables:
+        op.create_table('plan_items',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('plan_id', sa.Integer(), nullable=False),
+        sa.Column('goal', sa.String(), nullable=False),
+        sa.Column('actions_to_take', sa.String(), nullable=False),
+        sa.Column('deadline', sa.Date(), nullable=False),
+        sa.Column('is_completed', sa.Boolean(), server_default=sa.text('false'), nullable=True),
+        sa.ForeignKeyConstraint(['plan_id'], ['development_plans.id'], ),
+        sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_plan_items_id'), 'plan_items', ['id'], unique=False)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # Check if tables exist before dropping
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
+    
     # plan_items cədvəlini silirik
-    op.drop_index(op.f('ix_plan_items_id'), table_name='plan_items')
-    op.drop_table('plan_items')
+    if 'plan_items' in tables:
+        op.drop_index(op.f('ix_plan_items_id'), table_name='plan_items')
+        op.drop_table('plan_items')
     
     # development_plans cədvəlini silirik
-    op.drop_index(op.f('ix_development_plans_id'), table_name='development_plans')
-    op.drop_table('development_plans')
+    if 'development_plans' in tables:
+        op.drop_index(op.f('ix_development_plans_id'), table_name='development_plans')
+        op.drop_table('development_plans')
