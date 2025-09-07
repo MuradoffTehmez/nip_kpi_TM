@@ -6,7 +6,7 @@ import numpy as np
 from streamlit_cookies_controller import CookieController
 from sqlalchemy import select, update, delete
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html, check_login
+from utils.utils import download_guide_doc_file, logout, add_data, popup_successful_operation, to_excel, to_excel_formatted_report, get_styled_table_html, check_login, show_notifications
 from models.user import User
 from models.indicator import Indicator
 from models.user_profile import UserProfile
@@ -18,6 +18,14 @@ if current_user.role != "admin":
     st.stop()
 
 controller = CookieController()
+
+st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
+show_notifications()  # Show notifications in sidebar
+st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
+st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:")
+st.sidebar.page_link(page="pages/9_debug.py", label="DEBUG SƏHİFƏSİ", icon="🐞")
+download_guide_doc_file()
+logout()
 
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")

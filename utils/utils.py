@@ -31,6 +31,51 @@ def check_login():
         return user
 
 
+def get_subordinates(manager_id):
+    """Get all subordinates for a manager"""
+    with get_db() as session:
+        subordinates = session.query(User).filter(User.manager_id == manager_id, User.is_active == True).all()
+        return subordinates
+
+
+def check_upcoming_evaluations():
+    """Check for evaluations that are approaching deadlines"""
+    from models.kpi import Evaluation, EvaluationPeriod
+    from datetime import datetime, timedelta
+    
+    with get_db() as session:
+        # Find evaluations that are due in the next 7 days
+        upcoming_evaluations = session.query(Evaluation, EvaluationPeriod, User).join(
+            EvaluationPeriod, Evaluation.period_id == EvaluationPeriod.id
+        ).join(
+            User, Evaluation.evaluated_user_id == User.id
+        ).filter(
+            EvaluationPeriod.end_date >= datetime.now().date(),
+            EvaluationPeriod.end_date <= (datetime.now() + timedelta(days=7)).date(),
+            Evaluation.status == "PENDING"
+        ).all()
+        
+        return upcoming_evaluations
+
+
+def show_notifications():
+    """Show notifications to the user"""
+    from models.kpi import Evaluation, EvaluationPeriod
+    from datetime import datetime, timedelta
+    
+    # Check for upcoming evaluations
+    upcoming_evals = check_upcoming_evaluations()
+    
+    if upcoming_evals:
+        st.sidebar.warning("⚠️ Yakınlaşan Qiymətləndirmələr")
+        for eval, period, user in upcoming_evals:
+            days_until_due = (period.end_date - datetime.now().date()).days
+            if days_until_due == 0:
+                st.sidebar.warning(f"Bugün son tarix: {period.name} qiymətləndirməsi")
+            else:
+                st.sidebar.warning(f"{days_until_due} gün sonra son tarix: {period.name} qiymətləndirməsi")
+
+
 def download_guide_doc_file():
     with st.sidebar:
         with open('./data/qiymətləndirmə.docx', 'rb') as f:

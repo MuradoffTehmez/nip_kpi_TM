@@ -5,7 +5,7 @@ import plotly.express as px
 from streamlit_cookies_controller import CookieController
 from sqlalchemy import select
 from database import get_db
-from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html, check_login
+from utils.utils import download_guide_doc_file, logout, to_excel, to_excel_formatted_report, get_styled_table_html, check_login, show_notifications
 from data.months_in_azeri import evaluation_types
 from models.user import User
 from models.indicator import Indicator
@@ -15,6 +15,7 @@ from models.performance import Performance
 current_user = check_login()
 
 st.sidebar.page_link(page="pages/2_user.py", label="Nəticələrim", icon=":material/analytics:")
+show_notifications()  # Show notifications in sidebar
 download_guide_doc_file()
 logout()
 

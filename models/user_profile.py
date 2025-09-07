@@ -12,6 +12,7 @@ class UserProfile(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey(column=User.id, name="fk_user_profile_user_id", ondelete="CASCADE"), nullable=False)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     position: Mapped[str] = mapped_column(String, nullable=False)
+    department: Mapped[str] = mapped_column(String, nullable=True)
 
     # Relationship to User
     user = relationship("User", back_populates="profile")

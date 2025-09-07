@@ -4,7 +4,7 @@ import streamlit as st
 from database import get_db
 from models.user import User
 from models.kpi import Evaluation, EvaluationStatus
-from utils.utils import check_login
+from utils.utils import check_login, show_notifications
 
 st.set_page_config(layout="centered", page_title="KPI Tapşırıqlarım")
 
@@ -14,6 +14,9 @@ user_id = st.session_state['user_id']
 
 st.title(f"Xoş gəldin, {current_user.get_full_name()}!")
 st.header("KPI Tapşırıqlarınız")
+
+st.sidebar.page_link(page="pages/7_kpi_tapşırıqlarım.py", label="KPI Tapşırıqlarım", icon=":material/task:")
+show_notifications()  # Show notifications in sidebar
 
 with get_db() as session:
     try:

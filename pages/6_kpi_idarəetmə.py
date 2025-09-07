@@ -5,7 +5,7 @@ import datetime
 from database import get_db
 from models.user import User
 from models.kpi import EvaluationPeriod, Question, Evaluation, EvaluationStatus
-from utils.utils import check_login
+from utils.utils import check_login, show_notifications
 
 st.set_page_config(layout="wide", page_title="KPI İdarəetmə")
 
@@ -16,6 +16,9 @@ with get_db() as session:
     if current_user.role != 'admin':
         st.error("Bu səhifəyə giriş üçün icazəniz yoxdur.")
         st.stop()
+
+st.sidebar.page_link(page="pages/6_kpi_idarəetmə.py", label="KPI İdarəetmə", icon=":material/settings:")
+show_notifications()  # Show notifications in sidebar
 
 st.title("KPI Modulunun İdarə Edilməsi")
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Boolean, text
+from sqlalchemy import Integer, String, Boolean, text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from passlib.context import CryptContext
@@ -14,9 +14,14 @@ class User(Base):
     password: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    manager_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)
 
     # Relationship to UserProfile
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    
+    # Self-referential relationship for manager/subordinates
+    manager = relationship("User", remote_side=[id], back_populates="subordinates")
+    subordinates = relationship("User", back_populates="manager")
 
     def set_password(self, password: str):
         """Hash and set the user's password"""
