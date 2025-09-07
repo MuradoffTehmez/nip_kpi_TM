@@ -99,78 +99,82 @@ def popup_successful_operation():
         st.rerun()
 
 
-def add_data():
-    try:
-        with get_db() as session:
-            fullnames = sorted(list(set(session.scalars(
-                select(UserProfile.full_name)
-                .join(User, UserProfile.user_id == User.id)
-                .where(User.role != "admin", User.is_active == True)
-            ).all())))
-            
-            active_indicators = session.query(Indicator).filter(Indicator.is_active == True).all()
-
-            cols = st.columns(3)
-            with cols[0]:
-                fullname_to_evaluate = st.selectbox(label="Əməkdaş:", options=fullnames, index=None)
-            with cols[1]:
-                year_to_evaluate = st.selectbox(label="İl:", options=[2024, 2025, 2026], index=None)
-            with cols[2]:
-                month_to_evaluate = st.selectbox(label="Qiymətləndirmə növü:", options=evaluation_types, index=None)
-            
-            if fullname_to_evaluate and year_to_evaluate and month_to_evaluate:
-                user_id_to_evaluate = session.query(UserProfile.user_id).where(UserProfile.full_name == fullname_to_evaluate).scalar()
-                
-                existing_performance = session.query(Performance).filter(
-                    Performance.user_id == user_id_to_evaluate,
-                    Performance.evaluation_year == year_to_evaluate,
-                    Performance.evaluation_month == month_to_evaluate
-                ).first()
-
-                if existing_performance:
-                    st.divider()
-                    st.error("***Seçdiyiniz əməkdaşın qeyd etdiyiniz dövr üzrə qiymətləndirməsi artıq mövcuddur!***")
-                else:
-                    st.divider()
-                    st.subheader(f"'{fullname_to_evaluate}' üçün balları daxil edin:")
-
-                    with st.form("new_performance_form"):
-                        points_data = {}
-                        for indicator in active_indicators:
-                            points_data[indicator.id] = st.number_input(
-                                label=f"**{indicator.description}** (Çəkisi: {indicator.weight * 100:.0f}%)",
-                                min_value=2, max_value=5, value=None, key=f"points_{indicator.id}"
-                            )
-
-                        submitted = st.form_submit_button("Qiymətləndirməni Əlavə Et")
-
-                        if submitted:
-                            if any(point is None for point in points_data.values()):
-                                st.warning("Zəhmət olmasa, bütün göstəricilər üçün bal daxil edin.")
-                            else:
-                                try:
-                                    performance_records_to_add = []
-                                    for indicator in active_indicators:
-                                        points = points_data[indicator.id]
-                                        weighted_points = points * indicator.weight
-                                        
-                                        performance_records_to_add.append({
-                                            "user_id": user_id_to_evaluate,
-                                            "indicator_id": indicator.id,
-                                            "evaluation_year": year_to_evaluate,
-                                            "evaluation_month": month_to_evaluate,
-                                            "points": points,
-                                            "weighted_points": weighted_points
-                                        })
-                                    
-                                    session.execute(insert(Performance), performance_records_to_add)
-                                    session.commit()
-                                    st.success(f"'{fullname_to_evaluate}' üçün qiymətləndirmə uğurla əlavə edildi!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Qiymətləndirmə əlavə edərkən xəta baş verdi: {str(e)}")
-    except Exception as e:
-        st.error(f"Məlumat əlavə etmə formunu yükləyərkən xəta baş verdi: {str(e)}")
+# def add_data():
+#     """
+#     Bu funksiya 'Sistem 1'-ə aiddir və artıq istifadə edilmir.
+#     Yeni sistem 'Sistem 2'-dir (Sual-Cavab Modeli).
+#     """
+#     try:
+#         with get_db() as session:
+#             fullnames = sorted(list(set(session.scalars(
+#                 select(UserProfile.full_name)
+#                 .join(User, UserProfile.user_id == User.id)
+#                 .where(User.role != "admin", User.is_active == True)
+#             ).all())))
+#             
+#             active_indicators = session.query(Indicator).filter(Indicator.is_active == True).all()
+#
+#             cols = st.columns(3)
+#             with cols[0]:
+#                 fullname_to_evaluate = st.selectbox(label="Əməkdaş:", options=fullnames, index=None)
+#             with cols[1]:
+#                 year_to_evaluate = st.selectbox(label="İl:", options=[2024, 2025, 2026], index=None)
+#             with cols[2]:
+#                 month_to_evaluate = st.selectbox(label="Qiymətləndirmə növü:", options=evaluation_types, index=None)
+#             
+#             if fullname_to_evaluate and year_to_evaluate and month_to_evaluate:
+#                 user_id_to_evaluate = session.query(UserProfile.user_id).where(UserProfile.full_name == fullname_to_evaluate).scalar()
+#                 
+#                 existing_performance = session.query(Performance).filter(
+#                     Performance.user_id == user_id_to_evaluate,
+#                     Performance.evaluation_year == year_to_evaluate,
+#                     Performance.evaluation_month == month_to_evaluate
+#                 ).first()
+#
+#                 if existing_performance:
+#                     st.divider()
+#                     st.error("***Seçdiyiniz əməkdaşın qeyd etdiyiniz dövr üzrə qiymətləndirməsi artıq mövcuddur!***")
+#                 else:
+#                     st.divider()
+#                     st.subheader(f"'{fullname_to_evaluate}' üçün balları daxil edin:")
+#
+#                     with st.form("new_performance_form"):
+#                         points_data = {}
+#                         for indicator in active_indicators:
+#                             points_data[indicator.id] = st.number_input(
+#                                 label=f"**{indicator.description}** (Çəkisi: {indicator.weight * 100:.0f}%)",
+#                                 min_value=2, max_value=5, value=None, key=f"points_{indicator.id}"
+#                             )
+#
+#                         submitted = st.form_submit_button("Qiymətləndirməni Əlavə Et")
+#
+#                         if submitted:
+#                             if any(point is None for point in points_data.values()):
+#                                 st.warning("Zəhmət olmasa, bütün göstəricilər üçün bal daxil edin.")
+#                             else:
+#                                 try:
+#                                     performance_records_to_add = []
+#                                     for indicator in active_indicators:
+#                                         points = points_data[indicator.id]
+#                                         weighted_points = points * indicator.weight
+#                                         
+#                                         performance_records_to_add.append({
+#                                             "user_id": user_id_to_evaluate,
+#                                             "indicator_id": indicator.id,
+#                                             "evaluation_year": year_to_evaluate,
+#                                             "evaluation_month": month_to_evaluate,
+#                                             "points": points,
+#                                             "weighted_points": weighted_points
+#                                         })
+#                                     
+#                                     session.execute(insert(Performance), performance_records_to_add)
+#                                     session.commit()
+#                                     st.success(f"'{fullname_to_evaluate}' üçün qiymətləndirmə uğurla əlavə edildi!")
+#                                     st.rerun()
+#                                 except Exception as e:
+#                                     st.error(f"Qiymətləndirmə əlavə edərkən xəta baş verdi: {str(e)}")
+#     except Exception as e:
+#         st.error(f"Məlumat əlavə etmə formunu yükləyərkən xəta baş verdi: {str(e)}")
 
 
 def to_excel(df: pd.DataFrame):

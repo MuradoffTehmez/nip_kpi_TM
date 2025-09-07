@@ -1,0 +1,208 @@
+# services/kpi_service.py
+
+from database import get_db
+from models.kpi import Evaluation, Question, Answer, EvaluationPeriod, EvaluationStatus
+from services.user_service import UserService
+
+class KpiService:
+    @staticmethod
+    def calculate_evaluation_score(evaluation_id):
+        """
+        Hər bir qiymətləndirmə (Evaluation) üçün yekun balı hesablayır.
+        
+        Formula:
+        Yekun Bal = (Σ (cavab.score * sual.weight)) / (Σ sual.weight)
+        
+        Args:
+            evaluation_id (int): Qiymətləndirmənin ID-si.
+            
+        Returns:
+            float: Yekun bal. Əgər qiymətləndirmə tapılmazsa və ya sual yoxdursa, 0.0 qaytarır.
+        """
+        with get_db() as session:
+            # Qiymətləndirməni əldə edirik
+            evaluation = session.query(Evaluation).filter(Evaluation.id == evaluation_id).first()
+            if not evaluation:
+                return 0.0
+            
+            # Qiymətləndirməyə aid cavabları və sualları əldə edirik
+            answers = session.query(Answer).filter(Answer.evaluation_id == evaluation_id).all()
+            if not answers:
+                return 0.0
+                
+            total_weighted_score = 0.0
+            total_weight = 0.0
+            
+            for answer in answers:
+                question = session.query(Question).filter(Question.id == answer.question_id).first()
+                if question:
+                    total_weighted_score += answer.score * question.weight
+                    total_weight += question.weight
+                    
+            if total_weight == 0:
+                return 0.0
+                
+            return total_weighted_score / total_weight
+
+    @staticmethod
+    def get_user_performance_data(period_id, department=None):
+        """
+        Verilmiş dövr üçün istifadəçilərin performans məlumatlarını əldə edir.
+        
+        Args:
+            period_id (int): Qiymətləndirmə dövrünün ID-si.
+            department (str, optional): Şöbə. Əgər verilməzsə, bütün şöbələr üçün məlumat qaytarılır.
+            
+        Returns:
+            list: Hər bir istifadəçi üçün əməkdaş adı, şöbə və yekun bal siyahısı.
+        """
+        performance_data = []
+        
+        with get_db() as session:
+            # Qiymətləndirmə dövrünə aid tamamlanmış qiymətləndirmələri əldə edirik
+            evaluations = session.query(Evaluation).filter(
+                Evaluation.period_id == period_id,
+                Evaluation.status == EvaluationStatus.COMPLETED
+            ).all()
+            
+            user_scores = {}
+            user_departments = {}
+            
+            for evaluation in evaluations:
+                score = KpiService.calculate_evaluation_score(evaluation.id)
+                user_id = evaluation.evaluated_user_id
+                
+                if user_id not in user_scores:
+                    user_scores[user_id] = []
+                user_scores[user_id].append(score)
+                
+                # İstifadəçinin şöbəsini əldə edirik (əgər yoxdursa, None olacaq)
+                if user_id not in user_departments:
+                    profile = UserService.get_user_profile_by_user_id(user_id)
+                    user_departments[user_id] = profile.department if profile else None
+                    
+            # Hər bir istifadəçi üçün orta balı hesablayırıq
+            for user_id, scores in user_scores.items():
+                if scores:
+                    avg_score = sum(scores) / len(scores)
+                    user = UserService.get_user_by_id(user_id)
+                    full_name = user.get_full_name() if user else "Naməlum"
+                    department_name = user_departments.get(user_id)
+                    
+                    # Əgər şöbə filtr varsa və istifadəçi həmin şöbədə deyilsə, əlavə etmirik
+                    if department and department_name != department:
+                        continue
+                        
+                    performance_data.append({
+                        "full_name": full_name,
+                        "department": department_name,
+                        "total_score": avg_score
+                    })
+                    
+        return performance_data
+
+    @staticmethod
+    def get_department_performance_data(period_id):
+        """
+        Verilmiş dövr üçün şöbələrin orta performans məlumatlarını əldə edir.
+        
+        Args:
+            period_id (int): Qiymətləndirmə dövrünün ID-si.
+            
+        Returns:
+            list: Hər bir şöbə üçün adı və orta bal siyahısı.
+        """
+        department_data = []
+        
+        with get_db() as session:
+            # Qiymətləndirmə dövrünə aid tamamlanmış qiymətləndirmələri əldə edirik
+            evaluations = session.query(Evaluation).filter(
+                Evaluation.period_id == period_id,
+                Evaluation.status == EvaluationStatus.COMPLETED
+            ).all()
+            
+            dept_scores = {}
+            
+            for evaluation in evaluations:
+                score = KpiService.calculate_evaluation_score(evaluation.id)
+                user_id = evaluation.evaluated_user_id
+                
+                # İstifadəçinin şöbəsini əldə edirik
+                profile = UserService.get_user_profile_by_user_id(user_id)
+                department_name = profile.department if profile else "Naməlum"
+                
+                if department_name not in dept_scores:
+                    dept_scores[department_name] = []
+                dept_scores[department_name].append(score)
+                    
+            # Hər bir şöbə üçün orta balı hesablayırıq
+            for dept_name, scores in dept_scores.items():
+                if scores:
+                    avg_score = sum(scores) / len(scores)
+                    department_data.append({
+                        "department": dept_name,
+                        "avg_score": avg_score
+                    })
+                    
+        return department_data
+
+    @staticmethod
+    def get_user_performance_trend(user_id):
+        """
+        Verilmiş istifadəçi üçün performans trendini əldə edir.
+        
+        Args:
+            user_id (int): İstifadəçinin ID-si.
+            
+        Returns:
+            list: Hər bir qiymətləndirmə dövrü üçün dövr adı və yekun bal siyahısı.
+        """
+        trend_data = []
+        
+        with get_db() as session:
+            # İstifadəçinin qiymətləndirildiyi tamamlanmış qiymətləndirmələri əldə edirik
+            evaluations = session.query(Evaluation).filter(
+                Evaluation.evaluated_user_id == user_id,
+                Evaluation.status == EvaluationStatus.COMPLETED
+            ).order_by(Evaluation.period_id).all()
+            
+            for evaluation in evaluations:
+                score = KpiService.calculate_evaluation_score(evaluation.id)
+                period_name = evaluation.period.name
+                
+                trend_data.append({
+                    "period_name": period_name,
+                    "score": score
+                })
+                    
+        return trend_data
+
+    @staticmethod
+    def get_all_evaluation_periods():
+        """Bütün qiymətləndirmə dövrlərini əldə edir."""
+        with get_db() as session:
+            return session.query(EvaluationPeriod).order_by(EvaluationPeriod.start_date.desc()).all()
+
+    @staticmethod
+    def get_evaluation_period_by_id(period_id):
+        """Qiymətləndirmə dövrünü ID-sinə görə əldə edir."""
+        with get_db() as session:
+            return session.query(EvaluationPeriod).filter(EvaluationPeriod.id == period_id).first()
+
+    @staticmethod
+    def get_pending_evaluations_for_user(user_id):
+        """İstifadəçinin tamamlanmamış qiymətləndirmələrini əldə edir."""
+        with get_db() as session:
+            return session.query(Evaluation).filter(
+                Evaluation.evaluator_user_id == user_id,
+                Evaluation.status == EvaluationStatus.PENDING
+            ).all()
+
+    @staticmethod
+    def get_completed_evaluations_for_user(user_id):
+        """İstifadəçinin tamamlanmış qiymətləndirmələrini əldə edir."""
+        with get_db() as session:
+            return session.query(Evaluation).filter(
+                Evaluation.evaluator_user_id == user_id,
+                Evaluation.status == EvaluationStatus.COMPLETED
+            ).all()

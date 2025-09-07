@@ -2,7 +2,7 @@
 
 import enum
 import datetime
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Date, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Date, Enum, Boolean, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -34,6 +34,7 @@ class Question(Base):
     id = Column(Integer, primary_key=True)
     text = Column(Text, nullable=False)
     category = Column(String(100), default="Ümumi")
+    weight = Column(Float, default=1.0)  # Sualın çəkisi
     is_active = Column(Boolean, default=True)
     
     def __repr__(self):
