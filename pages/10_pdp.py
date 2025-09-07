@@ -47,14 +47,68 @@ else:
                 items_data = []
                 for item in items:
                     items_data.append({
+                        "ID": item.id,
                         "Hədəf": item.goal,
                         "Addımlar": item.actions_to_take,
                         "Son tarix": item.deadline.strftime('%d.%m.%Y'),
-                        "Status": "Tamamlandı" if item.is_completed else "Davam edir"
+                        "İnkişaf (%)": item.progress,
+                        "Status": item.status,
+                        "Tamamlandı": "✅" if item.is_completed else "❌"
                     })
                 
                 df_items = pd.DataFrame(items_data)
                 st.dataframe(df_items, use_container_width=True)
+                
+                # Hər bir hədəf üçün detallı baxış
+                for item in items:
+                    with st.expander(f"Hədəf: {item.goal}", expanded=False):
+                        st.write(f"**Addımlar:** {item.actions_to_take}")
+                        st.write(f"**Son tarix:** {item.deadline.strftime('%d.%m.%Y')}")
+                        
+                        # İnkişaf slayderi
+                        progress = st.slider(
+                            "İnkişaf (%)", 
+                            min_value=0, 
+                            max_value=100, 
+                            value=item.progress, 
+                            key=f"progress_slider_{item.id}"
+                        )
+                        
+                        # Status dropdown
+                        status_options = ["Başlanmayıb", "Davam edir", "Tamamlanıb"]
+                        status = st.selectbox(
+                            "Status", 
+                            options=status_options, 
+                            index=status_options.index(item.status) if item.status in status_options else 0,
+                            key=f"status_select_{item.id}"
+                        )
+                        
+                        # Yeniləmək düyməsi
+                        if st.button("Yenilə", key=f"update_button_{item.id}"):
+                            PDPService.update_plan_item_progress(item.id, progress, status)
+                            st.success("Hədəf yeniləndi!")
+                            st.rerun()
+                        
+                        # Şərhlər bölməsi
+                        st.subheader("Şərhlər")
+                        comments = PDPService.get_comments_for_plan_item(item.id)
+                        if comments:
+                            for comment in comments:
+                                author = UserService.get_user_by_id(comment.author_id)
+                                st.markdown(f"**{author.get_full_name() if author else 'Naməlum'}** - {comment.created_at.strftime('%d.%m.%Y %H:%M')}")
+                                st.markdown(f"> {comment.comment_text}")
+                                st.markdown("---")
+                        else:
+                            st.info("Hələ heç bir şərh yoxdur.")
+                        
+                        # Yeni şərh əlavə etmək
+                        with st.form(f"comment_form_{item.id}"):
+                            comment_text = st.text_area("Şərh əlavə edin")
+                            submitted = st.form_submit_button("Şərh Əlavə Et")
+                            if submitted and comment_text:
+                                PDPService.add_comment_to_plan_item(item.id, current_user.id, comment_text)
+                                st.success("Şərh əlavə edildi!")
+                                st.rerun()
             
             # Yeni hədəf əlavə etmək
             st.divider()

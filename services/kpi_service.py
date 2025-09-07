@@ -3,6 +3,8 @@
 from database import get_db
 from models.kpi import Evaluation, Question, Answer, EvaluationPeriod, EvaluationStatus
 from services.user_service import UserService
+from services.notification_service import NotificationService
+from typing import List
 
 class KpiService:
     @staticmethod
@@ -43,6 +45,40 @@ class KpiService:
                 return 0.0
                 
             return total_weighted_score / total_weight
+
+    @staticmethod
+    def update_evaluation_status(evaluation_id, new_status):
+        """
+        Qiymətləndirmənin statusunu yeniləyir və tərəflərə bildiriş göndərir.
+        
+        Args:
+            evaluation_id (int): Qiymətləndirmənin ID-si.
+            new_status (EvaluationStatus): Yeni status.
+        """
+        with get_db() as session:
+            evaluation = session.query(Evaluation).filter(Evaluation.id == evaluation_id).first()
+            if evaluation:
+                old_status = evaluation.status
+                evaluation.status = new_status
+                session.commit()
+                
+                # Bildiriş göndərmək
+                if new_status == EvaluationStatus.SELF_EVAL_COMPLETED:
+                    # Rəhbərə bildiriş göndər
+                    manager = UserService.get_user_by_id(evaluation.evaluator_user_id)
+                    if manager and manager.id != evaluation.evaluated_user_id:
+                        NotificationService.create_notification(
+                            user_id=manager.id,
+                            message=f"{evaluation.evaluated_user.get_full_name()} özünü qiymətləndirdi. Zəhmət olmasa, nəzərdən keçirin."
+                        )
+                elif new_status == EvaluationStatus.FINALIZED:
+                    # İşçiyə bildiriş göndər
+                    employee = UserService.get_user_by_id(evaluation.evaluated_user_id)
+                    if employee:
+                        NotificationService.create_notification(
+                            user_id=employee.id,
+                            message=f"{evaluation.period.name} qiymətləndirməniz yekunlaşdırıldı."
+                        )
 
     @staticmethod
     def get_user_performance_data(period_id, department=None):
@@ -212,3 +248,72 @@ class KpiService:
                 Evaluation.evaluator_user_id == user_id,
                 Evaluation.status == EvaluationStatus.FINALIZED
             ).all()
+            
+    @staticmethod
+    def get_self_eval_completed_evaluations_for_manager(manager_id):
+        """
+        Menecer üçün SELF_EVAL_COMPLETED statuslu qiymətləndirmələri əldə edir.
+        """
+        with get_db() as session:
+            return session.query(Evaluation).filter(
+                Evaluation.evaluator_user_id == manager_id,
+                Evaluation.status == EvaluationStatus.SELF_EVAL_COMPLETED
+            ).all()
+            
+    @staticmethod
+    def get_multiple_periods_performance_data(period_ids: List[int]):
+        """
+        Birdən çox qiymətləndirmə dövrünün nəticələrini eyni anda qaytaran servis funksiyası.
+        
+        Args:
+            period_ids (List[int]): Qiymətləndirmə dövrlərinin ID-ləri.
+            
+        Returns:
+            dict: Hər bir dövr üçün əməkdaş adı, şöbə və yekun bal siyahısı.
+        """
+        performance_comparison = {}
+        
+        with get_db() as session:
+            for period_id in period_ids:
+                period = session.query(EvaluationPeriod).filter(EvaluationPeriod.id == period_id).first()
+                if period:
+                    # Qiymətləndirmə dövrünə aid FINALIZED qiymətləndirmələri əldə edirik
+                    evaluations = session.query(Evaluation).filter(
+                        Evaluation.period_id == period_id,
+                        Evaluation.status == EvaluationStatus.FINALIZED
+                    ).all()
+                    
+                    user_scores = {}
+                    user_departments = {}
+                    
+                    for evaluation in evaluations:
+                        score = KpiService.calculate_evaluation_score(evaluation.id)
+                        user_id = evaluation.evaluated_user_id
+                        
+                        if user_id not in user_scores:
+                            user_scores[user_id] = []
+                        user_scores[user_id].append(score)
+                        
+                        # İstifadəçinin şöbəsini əldə edirik (əgər yoxdursa, None olacaq)
+                        if user_id not in user_departments:
+                            profile = UserService.get_user_profile_by_user_id(user_id)
+                            user_departments[user_id] = profile.department if profile else None
+                    
+                    # Hər bir istifadəçi üçün orta balı hesablayırıq
+                    period_data = []
+                    for user_id, scores in user_scores.items():
+                        if scores:
+                            avg_score = sum(scores) / len(scores)
+                            user = UserService.get_user_by_id(user_id)
+                            full_name = user.get_full_name() if user else "Naməlum"
+                            department_name = user_departments.get(user_id)
+                            
+                            period_data.append({
+                                "full_name": full_name,
+                                "department": department_name,
+                                "total_score": avg_score
+                            })
+                    
+                    performance_comparison[period.name] = period_data
+                    
+        return performance_comparison

@@ -1,6 +1,6 @@
 # models/pdp.py
 
-from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, text
+from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, text, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -34,6 +34,22 @@ class PlanItem(Base):
     actions_to_take = Column(String, nullable=False)  # Atılacaq addımlar
     deadline = Column(Date, nullable=False)  # Son tarix
     is_completed = Column(Boolean, default=False, server_default=text("false"))
+    progress = Column(Integer, default=0)  # 0-100 arası dəyər
+    status = Column(String, default="Başlanmayıb")  # "Başlanmayıb", "Davam edir", "Tamamlanıb"
     
     # Relationship
     plan = relationship("DevelopmentPlan", back_populates="plan_items")
+    comments = relationship("PlanItemComment", back_populates="plan_item", cascade="all, delete-orphan")
+
+class PlanItemComment(Base):
+    __tablename__ = "plan_item_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("plan_items.id"), nullable=False)
+    author_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    comment_text = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    plan_item = relationship("PlanItem", back_populates="comments")
+    author = relationship("User", backref="plan_item_comments")

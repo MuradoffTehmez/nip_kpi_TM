@@ -1,8 +1,9 @@
 # services/pdp_service.py
 
 from database import get_db
-from models.pdp import DevelopmentPlan, PlanItem
-from datetime import date
+from models.pdp import DevelopmentPlan, PlanItem, PlanItemComment
+from datetime import date, datetime
+from typing import List
 
 class PDPService:
     @staticmethod
@@ -57,7 +58,9 @@ class PDPService:
                 plan_id=plan_id,
                 goal=goal,
                 actions_to_take=actions_to_take,
-                deadline=deadline
+                deadline=deadline,
+                progress=0,
+                status="Başlanmayıb"
             )
             session.add(item)
             session.commit()
@@ -71,12 +74,27 @@ class PDPService:
             return session.query(PlanItem).filter(PlanItem.plan_id == plan_id).all()
 
     @staticmethod
+    def update_plan_item_progress(item_id: int, progress: int, status: str):
+        """Hədəfin inkişafını və statusunu yeniləyir."""
+        with get_db() as session:
+            item = session.query(PlanItem).filter(PlanItem.id == item_id).first()
+            if item:
+                item.progress = progress
+                item.status = status
+                # Əgər inkişaf 100%-dirsə, hədəfi tamamlanmış kimi qeyd edirik
+                if progress == 100:
+                    item.is_completed = True
+                session.commit()
+
+    @staticmethod
     def mark_plan_item_as_completed(item_id: int):
         """Hədəfi tamamlanmış kimi qeyd edir."""
         with get_db() as session:
             item = session.query(PlanItem).filter(PlanItem.id == item_id).first()
             if item:
                 item.is_completed = True
+                item.progress = 100
+                item.status = "Tamamlanıb"
                 session.commit()
 
     @staticmethod
@@ -87,3 +105,24 @@ class PDPService:
             if item:
                 session.delete(item)
                 session.commit()
+                
+    @staticmethod
+    def add_comment_to_plan_item(item_id: int, author_id: int, comment_text: str) -> PlanItemComment:
+        """Hədəfə şərh əlavə edir."""
+        with get_db() as session:
+            comment = PlanItemComment(
+                item_id=item_id,
+                author_id=author_id,
+                comment_text=comment_text,
+                created_at=datetime.utcnow()
+            )
+            session.add(comment)
+            session.commit()
+            session.refresh(comment)
+            return comment
+            
+    @staticmethod
+    def get_comments_for_plan_item(item_id: int) -> List[PlanItemComment]:
+        """Hədəf üçün bütün şərhləri qaytarır."""
+        with get_db() as session:
+            return session.query(PlanItemComment).filter(PlanItemComment.item_id == item_id).order_by(PlanItemComment.created_at.asc()).all()
