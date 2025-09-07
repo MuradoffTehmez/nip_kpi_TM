@@ -1,0 +1,11 @@
+# requirements-dev.txt
+
+# Testing
+pytest
+pytest-cov
+
+# Linting & Formatting
+flake8
+mypy
+isort
+black

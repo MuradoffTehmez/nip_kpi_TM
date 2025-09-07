@@ -2,6 +2,10 @@ from sqlalchemy import Integer, String, Boolean, text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from passlib.context import CryptContext
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models.user_profile import UserProfile
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -17,7 +21,7 @@ class User(Base):
     manager_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)
 
     # Relationship to UserProfile
-    profile = relationship("UserProfile", back_populates="user", uselist=False)
+    profile = relationship("UserProfile", back_populates="user", uselist=False, lazy="select")
     
     # Self-referential relationship for manager/subordinates
     manager = relationship("User", remote_side=[id], back_populates="subordinates")
