@@ -25,11 +25,19 @@ with get_db() as session:
         st.error("Bu qiymətləndirməyə icazəniz yoxdur və ya tapılmadı.")
         st.stop()
     
-    if evaluation.status == EvaluationStatus.COMPLETED:
-        st.success("Bu qiymətləndirmə artıq tamamlanıb.")
+    # Qiymətləndirmənin cari statusuna görə müvafiq mesaj göstər
+    if evaluation.status == EvaluationStatus.FINALIZED:
+        st.success("Bu qiymətləndirmə yekunlaşdırılıb.")
         if st.button("Tapşırıqlar Səhifəsinə Qayıt"):
             st.switch_page("pages/7_kpi_tapşırıqlarım.py")
         st.stop()
+    elif evaluation.status == EvaluationStatus.MANAGER_REVIEW_COMPLETED:
+        st.info("Bu qiymətləndirmə rəhbər tərəfindən dəyərləndirilib. Yalnız menecer onu yekunlaşdıra bilər.")
+        if st.button("Tapşırıqlar Səhifəsinə Qayıt"):
+            st.switch_page("pages/7_kpi_tapşırıqlarım.py")
+        st.stop()
+    elif evaluation.status == EvaluationStatus.SELF_EVAL_COMPLETED:
+        st.info("Bu qiymətləndirmə işçi tərəfindən dəyərləndirilib. Rəhbər tərəfindən nəzərdən keçirilməlidir.")
 
     evaluated_user = evaluation.evaluated_user
     
@@ -52,6 +60,10 @@ with get_db() as session:
 
         submitted = st.form_submit_button("Qiymətləndirməni Yadda Saxla", use_container_width=True, type="primary")
         if submitted:
+            # Mövcud cavabları sil
+            session.query(Answer).filter(Answer.evaluation_id == evaluation.id).delete()
+            
+            # Yeni cavabları əlavə et
             for q_id, ans in answers_data.items():
                 new_answer = Answer(
                     evaluation_id=evaluation.id,
@@ -61,7 +73,14 @@ with get_db() as session:
                 )
                 session.add(new_answer)
             
-            evaluation.status = EvaluationStatus.COMPLETED
+            # Qiymətləndirənin kim olduğuna görə statusu yenilə
+            if evaluation.evaluated_user_id == evaluation.evaluator_user_id:
+                # Əgər işçi özünü qiymətləndirirsə
+                evaluation.status = EvaluationStatus.SELF_EVAL_COMPLETED
+            else:
+                # Əgər rəhbər qiymətləndirirsə
+                evaluation.status = EvaluationStatus.MANAGER_REVIEW_COMPLETED
+            
             session.commit()
             
             st.success("Qiymətləndirmə uğurla tamamlandı! Tapşırıqlar səhifəsinə yönləndirilirsiniz...")

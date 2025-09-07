@@ -48,6 +48,7 @@ class KpiService:
     def get_user_performance_data(period_id, department=None):
         """
         Verilmiş dövr üçün istifadəçilərin performans məlumatlarını əldə edir.
+        Yalnız FINALIZED statuslu qiymətləndirmələri nəzərə alır.
         
         Args:
             period_id (int): Qiymətləndirmə dövrünün ID-si.
@@ -59,10 +60,10 @@ class KpiService:
         performance_data = []
         
         with get_db() as session:
-            # Qiymətləndirmə dövrünə aid tamamlanmış qiymətləndirmələri əldə edirik
+            # Qiymətləndirmə dövrünə aid FINALIZED qiymətləndirmələri əldə edirik
             evaluations = session.query(Evaluation).filter(
                 Evaluation.period_id == period_id,
-                Evaluation.status == EvaluationStatus.COMPLETED
+                Evaluation.status == EvaluationStatus.FINALIZED
             ).all()
             
             user_scores = {}
@@ -105,6 +106,7 @@ class KpiService:
     def get_department_performance_data(period_id):
         """
         Verilmiş dövr üçün şöbələrin orta performans məlumatlarını əldə edir.
+        Yalnız FINALIZED statuslu qiymətləndirmələri nəzərə alır.
         
         Args:
             period_id (int): Qiymətləndirmə dövrünün ID-si.
@@ -115,10 +117,10 @@ class KpiService:
         department_data = []
         
         with get_db() as session:
-            # Qiymətləndirmə dövrünə aid tamamlanmış qiymətləndirmələri əldə edirik
+            # Qiymətləndirmə dövrünə aid FINALIZED qiymətləndirmələri əldə edirik
             evaluations = session.query(Evaluation).filter(
                 Evaluation.period_id == period_id,
-                Evaluation.status == EvaluationStatus.COMPLETED
+                Evaluation.status == EvaluationStatus.FINALIZED
             ).all()
             
             dept_scores = {}
@@ -150,6 +152,7 @@ class KpiService:
     def get_user_performance_trend(user_id):
         """
         Verilmiş istifadəçi üçün performans trendini əldə edir.
+        Yalnız FINALIZED statuslu qiymətləndirmələri nəzərə alır.
         
         Args:
             user_id (int): İstifadəçinin ID-si.
@@ -160,10 +163,10 @@ class KpiService:
         trend_data = []
         
         with get_db() as session:
-            # İstifadəçinin qiymətləndirildiyi tamamlanmış qiymətləndirmələri əldə edirik
+            # İstifadəçinin qiymətləndirildiyi FINALIZED qiymətləndirmələri əldə edirik
             evaluations = session.query(Evaluation).filter(
                 Evaluation.evaluated_user_id == user_id,
-                Evaluation.status == EvaluationStatus.COMPLETED
+                Evaluation.status == EvaluationStatus.FINALIZED
             ).order_by(Evaluation.period_id).all()
             
             for evaluation in evaluations:
@@ -200,9 +203,12 @@ class KpiService:
 
     @staticmethod
     def get_completed_evaluations_for_user(user_id):
-        """İstifadəçinin tamamlanmış qiymətləndirmələrini əldə edir."""
+        """
+        İstifadəçinin tamamlanmış qiymətləndirmələrini əldə edir.
+        Burada "tamamlanmış" ifadəsi FINALIZED statusu ilə bağlıdır.
+        """
         with get_db() as session:
             return session.query(Evaluation).filter(
                 Evaluation.evaluator_user_id == user_id,
-                Evaluation.status == EvaluationStatus.COMPLETED
+                Evaluation.status == EvaluationStatus.FINALIZED
             ).all()

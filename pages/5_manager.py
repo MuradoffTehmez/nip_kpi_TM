@@ -7,6 +7,7 @@ from database import get_db
 from services.kpi_service import KpiService
 from services.user_service import UserService
 from utils.utils import check_login, show_notifications
+from models.kpi import Evaluation, EvaluationStatus
 
 st.set_page_config(layout="wide", page_title="Menecer Paneli")
 
@@ -67,7 +68,6 @@ else:
         if selected_user:
             # İşçinin seçilmiş dövr üzrə qiymətləndirmələrini əldə edirik
             with get_db() as session:
-                from models.kpi import Evaluation
                 evaluations = session.query(Evaluation).filter(
                     Evaluation.evaluated_user_id == selected_user.id,
                     Evaluation.period_id == selected_period.id
@@ -91,6 +91,7 @@ else:
                         status = e.status.value
                         
                         eval_details.append({
+                            "ID": e.id,
                             "Qiymətləndirən": evaluator.get_full_name() if evaluator else "Naməlum",
                             "Status": status,
                             "Yekun Bal": round(score, 2)
@@ -99,7 +100,42 @@ else:
                     df_eval_details = pd.DataFrame(eval_details)
                     st.dataframe(df_eval_details, use_container_width=True)
                     
+                    # Yekunlaşdırma funksiyası
+                    # Yalnız həm SELF_EVAL_COMPLETED, həm də MANAGER_REVIEW_COMPLETED statuslu qiymətləndirmələri yekunlaşdırmaq olar
+                    finalizable_evals = [e for e in evaluations if e.status in [EvaluationStatus.SELF_EVAL_COMPLETED, EvaluationStatus.MANAGER_REVIEW_COMPLETED]]
+                    if finalizable_evals:
+                        st.subheader("Yekunlaşdırma")
+                        st.info("Aşağıdakı qiymətləndirmələri yekunlaşdırmaq mümkündür:")
+                        
+                        # Yekunlaşdırmaq üçün qiymətləndirmə seçimi
+                        eval_options = [f"{e.id} - {UserService.get_user_by_id(e.evaluator_user_id).get_full_name() if UserService.get_user_by_id(e.evaluator_user_id) else 'Naməlum'} ({e.status.value})" for e in finalizable_evals]
+                        selected_evals_to_finalize = st.multiselect(
+                            "Yekunlaşdırmaq üçün qiymətləndirmələri seçin:",
+                            options=eval_options,
+                            default=eval_options
+                        )
+                        
+                        if st.button("Seçilmiş Qiymətləndirmələri Yekunlaşdır"):
+                            if selected_evals_to_finalize:
+                                finalized_count = 0
+                                for eval_option in selected_evals_to_finalize:
+                                    eval_id = int(eval_option.split(" - ")[0])
+                                    evaluation = session.query(Evaluation).filter(Evaluation.id == eval_id).first()
+                                    if evaluation and evaluation.status in [EvaluationStatus.SELF_EVAL_COMPLETED, EvaluationStatus.MANAGER_REVIEW_COMPLETED]:
+                                        evaluation.status = EvaluationStatus.FINALIZED
+                                        session.commit()
+                                        finalized_count += 1
+                                
+                                if finalized_count > 0:
+                                    st.success(f"{finalized_count} qiymətləndirmə uğurla yekunlaşdırıldı!")
+                                    st.rerun()
+                                else:
+                                    st.warning("Yekunlaşdırmaq üçün qiymətləndirmə seçilməyib.")
+                            else:
+                                st.warning("Yekunlaşdırmaq üçün qiymətləndirmə seçilməyib.")
+                    
                     # Qiymətləndirmə formuna keçid
+                    st.subheader("Qiymətləndirmə Formuna Bax")
                     if st.button("Qiymətləndirmə Formuna Bax"):
                         # Əgər yalnız bir qiymətləndirmə varsa, ona yönləndir
                         if len(evaluations) == 1:
@@ -126,7 +162,6 @@ else:
             # Komanda üzvlərinin seçilmiş dövr üzrə performansını əldə edirik
             performance_data = []
             with get_db() as session:
-                from models.kpi import Evaluation, EvaluationStatus
                 for user_id in subordinate_ids:
                     # Yalnız FINALIZED statuslu qiymətləndirmələri nəzərə alırıq
                     evaluations = session.query(Evaluation).filter(
