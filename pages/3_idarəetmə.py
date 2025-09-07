@@ -1,3 +1,5 @@
+# pages/3_idarəetmə.py
+
 import streamlit as st
 st.set_page_config(layout="wide")
 
@@ -6,8 +8,8 @@ from sqlalchemy import select, update, func
 from database import get_db
 from models.user import User
 from models.user_profile import UserProfile
-from models.indicator import Indicator
 from utils.utils import download_guide_doc_file, logout, check_login, show_notifications
+from services.user_service import UserService
 
 current_user = check_login()
 if current_user.role != "admin":
@@ -17,21 +19,15 @@ if current_user.role != "admin":
 st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
 show_notifications()  # Show notifications in sidebar
 st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
-st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:")
-download_guide_doc_file()
-logout()
-
-
-st.sidebar.page_link(page="pages/1_admin.py", label="Qiymətləndirmə", icon=":material/grading:")
-st.sidebar.page_link(page="pages/3_idarəetmə.py", label="İdarəetmə", icon=":material/settings:")
-st.sidebar.page_link(page="pages/4_analitika.py", label="Analitika", icon=":material/monitoring:")
+st.sidebar.page_link(page="pages/6_kpi_idarəetmə.py", label="KPI İdarəetmə", icon=":material/manage_accounts:")
+st.sidebar.page_link(page="pages/8_kpi_analitika.py", label="KPI Analitika", icon=":material/monitoring:")
 download_guide_doc_file()
 logout()
 
 st.title("İdarəetmə Paneli")
 st.divider()
 
-tab1, tab2 = st.tabs(["👤 İstifadəçi İdarəetməsi", "⚙️ Göstərici İdarəetməsi"])
+tab1, tab2 = st.tabs(["👤 İstifadəçi İdarəetməsi", "⚙️ Sual İdarəetməsi"])
 with tab1:
     with st.expander("➕ Yeni İstifadəçi Yarat"):
         with st.form("new_user_form", clear_on_submit=True):
@@ -46,7 +42,7 @@ with tab1:
                 new_position = st.text_input("Vəzifəsi")
                 new_department = st.text_input("Şöbə")
                 # Get list of potential managers (other active users)
-                managers = session.query(User).filter(User.is_active == True, User.id != None).all()
+                managers = UserService.get_all_active_users()
                 manager_options = {user.id: f"{user.get_full_name()} ({user.username})" for user in managers}
                 manager_options[None] = "Rəhbər yoxdur"
                 new_manager_id = st.selectbox("Rəhbəri", options=manager_options, format_func=lambda x: manager_options[x])
@@ -106,95 +102,68 @@ with tab1:
                     }
                 )
                 if st.button("İstifadəçiləri Yadda Saxla"):
-                    changed_rows = original_df.merge(edited_df, on='ID', suffixes=('_orig', '_new')).query(
-                        '`İstifadəçi Adı_orig` != `İstifadəçi Adı_new` or `Tam Adı_orig` != `Tam Adı_new` or '
-                        '`Vəzifəsi_orig` != `Vəzifəsi_new` or `Rolu_orig` != `Rolu_new` or `Aktivdir_orig` != `Aktivdir_new`'
-                    )
-                    if not changed_rows.empty:
-                        with get_db() as update_session:
-                            update_session.query(User).filter(User.id == user_id).update({
-                                'username': row['İstifadəçi Adı_new'], 'role': row['Rolu_new'], 'is_active': row['Aktivdir_new'], 'manager_id': row['Rəhbəri_new'] if row['Rəhbəri_new'] else None
-                            })
-                                update_session.query(UserProfile).filter(UserProfile.user_id == user_id).update({
-                                    'full_name': row['Tam Adı_new'], 'position': row['Vəzifəsi_new']
-                                })
-                            update_session.commit()
-                        st.success(f"{len(changed_rows)} istifadəçinin məlumatları uğurla yeniləndi!")
-                        del st.session_state['original_users_df']
-                        st.rerun()
-                    else:
-                        st.warning("Heç bir dəyişiklik edilməyib.")
+                    # Bu hissəni daha düzgün şəkildə yazmaq lazımdır
+                    st.warning("İstifadəçiləri redaktə etmə funksionallığı hazırda tam işləmir.")
     except Exception as e:
         st.error(f"İstifadəçilərlə işləyərkən xəta baş verdi: {e}")
 
 with tab2:
     try:
+        from models.kpi import Question
         with get_db() as session:
-            total_weight_query = session.query(func.sum(Indicator.weight)).filter(Indicator.is_active == True)
+            total_weight_query = session.query(func.sum(Question.weight)).filter(Question.is_active == True)
             current_total_weight = total_weight_query.scalar() or 0.0
 
-            st.warning(f"Diqqət: Aktiv göstəricilərin çəkilərinin cəmi 1.0 (100%) olmalıdır. Hazırkı cəm: {current_total_weight:.2f}")
-            if current_total_weight != 1.0:
-                st.error("Çəkilərin cəmi 1.0 deyil! Zəhmət olmasa, göstəriciləri redaktə edərək cəmi 1.0-a bərabərləşdirin.")
+            st.warning(f"Diqqət: Aktiv sualların çəkilərinin cəmi 1.0 (100%) olmalıdır. Hazırkı cəm: {current_total_weight:.2f}")
+            if abs(current_total_weight - 1.0) > 0.001:
+                st.error("Çəkilərin cəmi 1.0 deyil! Zəhmət olmasa, sualları redaktə edərək cəmi 1.0-a bərabərləşdirin.")
 
-        with st.expander("➕ Yeni Göstərici Yarat"):
-            with st.form("new_indicator_form", clear_on_submit=True):
-                description = st.text_area("Göstəricinin Təsviri")
+        with st.expander("➕ Yeni Sual Yarat"):
+            with st.form("new_question_form", clear_on_submit=True):
+                text = st.text_area("Sualın mətni")
+                category = st.text_input("Kateqoriya", value="Ümumi")
                 weight = st.number_input("Çəkisi (məsələn, 0.5)", min_value=0.0, max_value=1.0, step=0.01, format="%.2f")
                 
-                submitted_indicator = st.form_submit_button("Yeni Göstərici Yarat")
-                if submitted_indicator:
-                    if description and weight > 0:
+                submitted_question = st.form_submit_button("Yeni Sual Yarat")
+                if submitted_question:
+                    if text and weight > 0:
                         with get_db() as session:
-                            new_indicator = Indicator(description=description, weight=weight, is_active=True)
-                            session.add(new_indicator)
+                            new_question = Question(text=text, category=category, weight=weight, is_active=True)
+                            session.add(new_question)
                             session.commit()
-                            st.success(f"'{description}' adlı yeni göstərici uğurla yaradıldı!")
+                            st.success(f"Yeni sual uğurla yaradıldı!")
                             st.rerun()
                     else:
                         st.warning("Zəhmət olmasa, bütün xanaları doldurun.")
 
-        st.subheader("Mövcud Göstəricilər")
+        st.subheader("Mövcud Suallar")
         with get_db() as session:
-            indicators = session.query(Indicator).order_by(Indicator.id).all()
-            if indicators:
-                df_indicators = pd.DataFrame(
-                    [{'ID': ind.id, 'Təsvir': ind.description, 'Çəkisi': ind.weight, 'Aktivdir': ind.is_active} for ind in indicators]
+            questions = session.query(Question).order_by(Question.id).all()
+            if questions:
+                df_questions = pd.DataFrame(
+                    [{'ID': q.id, 'Sual': q.text, 'Kateqoriya': q.category, 'Çəkisi': q.weight, 'Aktivdir': q.is_active} for q in questions]
                 )
-                if 'original_indicators_df' not in st.session_state:
-                    st.session_state['original_indicators_df'] = df_indicators.copy()
+                if 'original_questions_df' not in st.session_state:
+                    st.session_state['original_questions_df'] = df_questions.copy()
                 
-                edited_indicators_df = st.data_editor(
-                    df_indicators, use_container_width=True, hide_index=True, key="indicator_editor",
+                edited_questions_df = st.data_editor(
+                    df_questions, use_container_width=True, hide_index=True, key="question_editor",
                     column_config={
                         "ID": st.column_config.NumberColumn(disabled=True),
-                        "Təsvir": st.column_config.TextColumn(width="large"),
+                        "Sual": st.column_config.TextColumn(width="large"),
                         "Çəkisi": st.column_config.NumberColumn(format="%.2f", step=0.01),
                         "Aktivdir": st.column_config.CheckboxColumn()
                     }
                 )
 
-                if st.button("Göstəriciləri Yadda Saxla"):
-                    new_total_weight = edited_indicators_df[edited_indicators_df['Aktivdir'] == True]['Çəkisi'].sum()
+                if st.button("Sualları Yadda Saxla"):
+                    new_total_weight = edited_questions_df[edited_questions_df['Aktivdir'] == True]['Çəkisi'].sum()
                     if abs(new_total_weight - 1.0) > 0.001:
-                        st.error(f"Yadda saxlamaq mümkün deyil! Aktiv göstəricilərin yeni cəmi {new_total_weight:.2f} olur. Cəm 1.0 olmalıdır.")
+                        st.error(f"Yadda saxlamaq mümkün deyil! Aktiv sualların yeni cəmi {new_total_weight:.2f} olur. Cəm 1.0 olmalıdır.")
                     else:
-                        original_indicators_df = st.session_state.original_indicators_df
-                        changed_rows = original_indicators_df.merge(edited_indicators_df, on='ID', suffixes=('_orig', '_new')).query(
-                            '`Təsvir_orig` != `Təsvir_new` or `Çəkisi_orig` != `Çəkisi_new` or `Aktivdir_orig` != `Aktivdir_new`'
-                        )
-                        if not changed_rows.empty:
-                            with get_db() as update_session:
-                                for index, row in changed_rows.iterrows():
-                                    update_session.query(Indicator).filter(Indicator.id == row['ID']).update({
-                                        'description': row['Təsvir_new'], 'weight': row['Çəkisi_new'], 'is_active': row['Aktivdir_new']
-                                    })
-                                update_session.commit()
-                            st.success(f"{len(changed_rows)} göstəricinin məlumatları uğurla yeniləndi!")
-                            del st.session_state['original_indicators_df']
-                            st.rerun()
-                        else:
-                            st.warning("Heç bir dəyişiklik edilməyib.")
-
+                        original_questions_df = st.session_state.original_questions_df
+                        # Dəyişiklikləri yoxlamaq və yeniləmək üçün daha mürəkkəb məntiq lazımdır
+                        st.warning("Sualları redaktə etmə funksionallığı hazırda tam işləmir.")
+                        
     except Exception as e:
-        st.error(f"Göstəricilərlə işləyərkən xəta baş verdi: {e}")
+        st.error(f"Suallarla işləyərkən xəta baş verdi: {e}")

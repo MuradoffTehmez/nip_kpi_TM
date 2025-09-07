@@ -2,10 +2,12 @@
 
 import streamlit as st
 import datetime
+from sqlalchemy import func
 from database import get_db
 from models.user import User
 from models.kpi import EvaluationPeriod, Question, Evaluation, EvaluationStatus
 from utils.utils import check_login, show_notifications
+from services.notification_service import NotificationService
 
 st.set_page_config(layout="wide", page_title="KPI İdarəetmə")
 
@@ -53,6 +55,14 @@ with tab1:
                             session.add(self_evaluation)
                         
                         session.commit()
+                        
+                        # İstifadəçilərə bildiriş göndəririk
+                        for user in users:
+                            NotificationService.create_notification(
+                                user_id=user.id,
+                                message=f"Yeni qiymətləndirmə dövrü '{period_name}' yaradıldı. Qiymətləndirmə formunu doldurun."
+                            )
+                            
                         st.success(f"'{period_name}' dövrü və {len(users)} özünüqiymətləndirmə tapşırığı yaradıldı!")
                         st.rerun()
                 except Exception as e:
@@ -60,8 +70,7 @@ with tab1:
 
     st.markdown("---")
     st.subheader("📊 Mövcud Dövrlər")
-    try:+77777
-                                                                                                                                        
+    try:
         with get_db() as session:
             periods = session.query(EvaluationPeriod).order_by(EvaluationPeriod.start_date.desc()).all()
             if not periods:
@@ -76,19 +85,37 @@ with tab1:
 
 with tab2:
     st.header("Sualların İdarə Edilməsi")
+    
+    # Aktiv sualların çəkilərinin cəmini göstər
+    with get_db() as session:
+        total_weight_query = session.query(func.sum(Question.weight)).filter(Question.is_active == True)
+        current_total_weight = total_weight_query.scalar() or 0.0
+
+        st.warning(f"Diqqət: Aktiv sualların çəkilərinin cəmi 1.0 (100%) olmalıdır. Hazırkı cəm: {current_total_weight:.2f}")
+        if abs(current_total_weight - 1.0) > 0.001:
+            st.error("Çəkilərin cəmi 1.0 deyil! Zəhmət olmasa, sualları redaktə edərək cəmi 1.0-a bərabərləşdirin.")
+
     with st.expander("➕ Yeni Sual Əlavə Et", expanded=False):
         with st.form("yeni_sual_form", clear_on_submit=True):
             q_text = st.text_area("Sualın mətni")
             q_category = st.text_input("Kateqoriya", value="Ümumi")
+            q_weight = st.number_input("Çəkisi (məsələn, 0.5)", min_value=0.0, max_value=1.0, step=0.01, format="%.2f", value=0.1)
             q_submitted = st.form_submit_button("Əlavə et")
             if q_submitted and q_text:
                 try:
                     with get_db() as session:
-                        new_question = Question(text=q_text, category=q_category)
-                        session.add(new_question)
-                        session.commit()
-                        st.success("Yeni sual əlavə edildi!")
-                        st.rerun()
+                        # Yeni sual əlavə etməzdən əvvəl çəki cəmini yoxlayırıq
+                        total_weight_query = session.query(func.sum(Question.weight)).filter(Question.is_active == True)
+                        current_total_weight = total_weight_query.scalar() or 0.0
+                        
+                        if current_total_weight + q_weight > 1.0:
+                            st.error(f"Yeni sual əlavə etmək mümkün deyil! Cəm {current_total_weight + q_weight:.2f} olacaq, lakin maksimum 1.0 ola bilər.")
+                        else:
+                            new_question = Question(text=q_text, category=q_category, weight=q_weight)
+                            session.add(new_question)
+                            session.commit()
+                            st.success("Yeni sual əlavə edildi!")
+                            st.rerun()
                 except Exception as e:
                     st.error(f"Sual əlavə edərkən xəta baş verdi: {str(e)}")
 
@@ -98,7 +125,7 @@ with tab2:
         with get_db() as session:
             questions = session.query(Question).all()
             st.dataframe(
-                [{"ID": q.id, "Kateqoriya": q.category, "Sual": q.text} for q in questions],
+                [{"ID": q.id, "Kateqoriya": q.category, "Sual": q.text, "Çəki": q.weight, "Aktiv": q.is_active} for q in questions],
                 use_container_width=True
             )
     except Exception as e:
