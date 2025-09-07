@@ -11,6 +11,16 @@ try:
 except ImportError:
     from database import Base
 
+# Association table for 360-degree questions and competencies
+from sqlalchemy import Table
+degree360_question_competency_association = Table(
+    'degree360_question_competency',
+    Base.metadata,
+    Column('question_id', Integer, ForeignKey('degree360_questions.id'), primary_key=True),
+    Column('competency_id', Integer, ForeignKey('competencies.id'), primary_key=True),
+    extend_existing=True
+)
+
 class Degree360Session(Base):
     """
     360 dərəcə qiymətləndirmə sessiyası.
@@ -77,6 +87,12 @@ class Degree360Question(Base):
     weight = Column(Integer, default=1)  # Sualın çəkisi (1-5 arası)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Competency relationship
+    competencies = relationship(
+        "Competency",
+        secondary=degree360_question_competency_association
+    )
     
     # Relationship
     session = relationship("Degree360Session", back_populates="questions")

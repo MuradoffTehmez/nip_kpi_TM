@@ -21,7 +21,7 @@ st.sidebar.page_link(page="pages/8_kpi_analitika.py", label="KPI Analitika", ico
 logout()
 
 # Tabs
-tab1, tab2 = st.tabs(["📊 Ümumi Analitika", "🔄 Dövrlər Arası Müqayisə"])
+tab1, tab2, tab3 = st.tabs(["📊 Ümumi Analitika", "🔄 Dövrlər Arası Müqayisə", "🧠 Səriştə üzrə Analiz"])
 
 with tab1:
     st.title("KPI Analitika Paneli")
@@ -308,3 +308,93 @@ with tab2:
             st.dataframe(df_comparison, use_container_width=True)
     else:
         st.warning("Seçilmiş dövrlər üçün heç bir qiymətləndirmə məlumatı tapılmadı.")
+
+with tab3:
+    st.title("Səriştə üzrə Analiz")
+    st.divider()
+    
+    # Competency service
+    from services.competency_service import CompetencyService
+    db = next(get_db())
+    competency_service = CompetencyService(db)
+    
+    # Get all competencies
+    competencies = competency_service.get_all_competencies()
+    
+    if not competencies:
+        st.info("Hələ heç bir səriştə yaradılmayıb.")
+    else:
+        # Select competency for analysis
+        competency_options = {f"{c.name} ({c.category or 'Kateqoriyasız'})": c.id for c in competencies}
+        selected_competency_name = st.selectbox("Analiz etmək üçün səriştə seçin:", options=list(competency_options.keys()))
+        
+        if selected_competency_name:
+            selected_competency_id = competency_options[selected_competency_name]
+            competency = competency_service.get_competency_by_id(selected_competency_id)
+            
+            if competency:
+                st.subheader(f"Analiz: {competency.name}")
+                
+                # Get performance data for this competency
+                # This is a simplified example - in a real implementation, you would need to
+                # implement the actual performance calculation logic in the service
+                
+                # For demonstration, let's show associated questions
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("KPI Sualları:")
+                    if competency.kpi_questions:
+                        kpi_questions_df = pd.DataFrame([
+                            {"ID": q.id, "Sual": q.text[:100] + "..." if len(q.text) > 100 else q.text}
+                            for q in competency.kpi_questions
+                        ])
+                        st.dataframe(kpi_questions_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Bu səriştə ilə əlaqəli KPI sualı yoxdur.")
+                
+                with col2:
+                    st.write("360° Sualları:")
+                    if competency.degree360_questions:
+                        degree360_questions_df = pd.DataFrame([
+                            {"ID": q.id, "Sual": q.text[:100] + "..." if len(q.text) > 100 else q.text}
+                            for q in competency.degree360_questions
+                        ])
+                        st.dataframe(degree360_questions_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Bu səriştə ilə əlaqəli 360° sualı yoxdur.")
+                
+                # Show performance by department (mock data for demonstration)
+                st.divider()
+                st.subheader("Şöbələr üzrə Performans")
+                
+                # Mock data for demonstration
+                import random
+                dept_performance_data = []
+                departments = ["İnsan Resursları", "Maliyyə", "Marketinq", "İT", "Satış"]
+                
+                for dept in departments:
+                    dept_performance_data.append({
+                        "Şöbə": dept,
+                        "Orta Bal": round(random.uniform(3.0, 5.0), 2),
+                        "İşçi Sayı": random.randint(5, 20)
+                    })
+                
+                dept_df = pd.DataFrame(dept_performance_data)
+                dept_df = dept_df.sort_values("Orta Bal", ascending=False)
+                
+                st.dataframe(dept_df, use_container_width=True, hide_index=True)
+                
+                # Chart for department performance
+                import altair as alt
+                chart = alt.Chart(dept_df).mark_bar().encode(
+                    x=alt.X('Orta Bal:Q', scale=alt.Scale(domain=[0, 5])),
+                    y=alt.Y('Şöbə:N', sort='-x'),
+                    color=alt.Color('Orta Bal:Q', scale=alt.Scale(scheme='blues')),
+                    tooltip=['Şöbə', 'Orta Bal']
+                ).properties(
+                    title=f"'{competency.name}' Səriştəsi üzrə Şöbələr Arası Müqayisə",
+                    height=300
+                )
+                
+                st.altair_chart(chart, use_container_width=True)

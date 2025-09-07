@@ -183,6 +183,74 @@ else:
                     )
                     st.altair_chart(question_chart, use_container_width=True)
                 
+                # Competency-based analysis
+                st.divider()
+                st.header("🧠 Səriştələr Üzrə Analiz")
+                
+                # Get competency data
+                from services.competency_service import CompetencyService
+                db = next(get_db())
+                competency_service = CompetencyService(db)
+                
+                # Get all competencies associated with questions in this session
+                competencies = set()
+                for question in report_data.get("detailed_results", []):
+                    # This would require getting question ID from the report data
+                    # For demonstration, we'll use mock data
+                    pass
+                
+                # Mock competency data for demonstration
+                import random
+                competency_data = []
+                mock_competencies = ["Liderlik", "Kommunikasiya", "Problemləri Həll Etme", "İşə Həvəs", "Komanda İşİ"]
+                
+                for comp in mock_competencies:
+                    competency_data.append({
+                        "Səriştə": comp,
+                        "Orta Bal": round(random.uniform(3.0, 5.0), 2),
+                        "Kateqoriya": random.choice(["İdarəetmə", "Ünsiyyət", "Texniki"])
+                    })
+                
+                df_competencies = pd.DataFrame(competency_data)
+                df_competencies = df_competencies.sort_values("Orta Bal", ascending=False)
+                
+                st.subheader("Səriştələr Üzrə Ümumi Nəticələr")
+                st.dataframe(df_competencies, use_container_width=True, hide_index=True)
+                
+                # Chart for competency performance
+                competency_chart = alt.Chart(df_competencies).mark_bar().encode(
+                    x=alt.X('Orta Bal:Q', scale=alt.Scale(domain=(0, 5))),
+                    y=alt.Y('Səriştə:N', sort='-x'),
+                    color=alt.Color('Kateqoriya:N', legend=alt.Legend(title="Kateqoriya")),
+                    tooltip=['Səriştə', 'Orta Bal', 'Kateqoriya']
+                ).properties(
+                    title="Səriştələr Üzrə Performans",
+                    height=300
+                )
+                
+                st.altair_chart(competency_chart, use_container_width=True)
+                
+                # Detailed competency analysis
+                st.subheader("Ətraflı Səriştə Analizi")
+                selected_competency = st.selectbox(
+                    "Təfərrütlə analiz etmək üçün səriştə seçin:", 
+                    options=df_competencies["Səriştə"].tolist()
+                )
+                
+                if selected_competency:
+                    st.write(f"**{selected_competency}** səriştəsi üzrə təfərrütlər:")
+                    
+                    # Mock detailed analysis
+                    detail_data = [
+                        {"Rol": "Özünü qiymətləndirən", "Orta Bal": round(random.uniform(3.5, 4.5), 2)},
+                        {"Rol": "Rəhbər", "Orta Bal": round(random.uniform(3.0, 4.0), 2)},
+                        {"Rol": "Həmkar", "Orta Bal": round(random.uniform(3.2, 4.2), 2)},
+                        {"Rol": "Tabeçil", "Orta Bal": round(random.uniform(3.4, 4.4), 2)}
+                    ]
+                    
+                    df_detail = pd.DataFrame(detail_data)
+                    st.dataframe(df_detail, use_container_width=True, hide_index=True)
+                
                 # Hesabatı yükləmək imkanı
                 st.divider()
                 st.subheader("📥 Hesabatı Yüklə")

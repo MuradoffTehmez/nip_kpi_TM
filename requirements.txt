@@ -163,3 +163,8 @@ wheel==0.45.1
 XlsxWriter==3.2.0
 yt-dlp==2025.7.21
 zopfli==0.2.3.post1
+
+# Testing dependencies
+pytest==8.3.2
+pytest-cov==5.0.0
+Faker==26.0.0

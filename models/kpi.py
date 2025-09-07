@@ -14,6 +14,16 @@ except ImportError:
     # Əgər mərkəzi Base yoxdursa, yeni birini yaradırıq.
     Base = declarative_base()
 
+# Association table for KPI questions and competencies
+from sqlalchemy import Table
+kpi_question_competency_association = Table(
+    'kpi_question_competency',
+    Base.metadata,
+    Column('question_id', Integer, ForeignKey('questions.id'), primary_key=True),
+    Column('competency_id', Integer, ForeignKey('competencies.id'), primary_key=True),
+    extend_existing=True
+)
+
 class EvaluationPeriod(Base):
     """ Qiymətləndirmə dövrü (məsələn, "2025 - I Rüblük") """
     __tablename__ = 'evaluation_periods'
@@ -36,6 +46,12 @@ class Question(Base):
     category = Column(String(100), default="Ümumi")
     weight = Column(Float, default=1.0)  # Sualın çəkisi
     is_active = Column(Boolean, default=True)
+    
+    # Competency relationship
+    competencies = relationship(
+        "Competency",
+        secondary=kpi_question_competency_association
+    )
     
     def __repr__(self):
         return f"<Question(text='{self.text[:30]}...')>"

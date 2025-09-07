@@ -2,6 +2,10 @@ import streamlit as st
 from streamlit_cookies_controller import CookieController
 from database import get_db
 from models.user import User
+from utils.db_utils import run_migrations
+
+# Run automatic migrations on startup
+run_migrations()
 
 # Səhifənin ilkin konfiqurasiyası
 st.set_page_config(layout="centered", page_title="KPI Sistemi - Giriş")
