@@ -57,7 +57,8 @@ with tab1:
 
     st.markdown("---")
     st.subheader("📊 Mövcud Dövrlər")
-    try:
+    try:+77777
+                                                                                                                                        
         with get_db() as session:
             periods = session.query(EvaluationPeriod).order_by(EvaluationPeriod.start_date.desc()).all()
             if not periods:
